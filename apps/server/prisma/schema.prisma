@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, vector]
+}
+
+model Region {
+  id           String             @id @default(uuid())
+  name         String
+  code         String             @unique
+  level        String             @default("village")
+  geometry     Unsupported("geometry(Polygon, 4326)")
+  area_km2     Float?
+  perimeter_km Float?
+  created_at   DateTime           @default(now())
+  updated_at   DateTime           @updatedAt
+  details      RegionDetail?
+  revisions    BoundaryRevision[]
+
+  @@index([geometry], name: "region_geometry_idx", type: Gist)
+  @@map("regions")
+}
+
+model RegionDetail {
+  id             String @id @default(uuid())
+  region_id      String @unique
+  description    String? @db.Text
+  population     Int?
+  economic_index Float?
+  tourism_data   Json?
+  culture_info   String? @db.Text
+  region         Region @relation(fields: [region_id], references: [id], onDelete: Cascade)
+
+  @@map("region_details")
+}
+
+model BoundaryRevision {
+  id              String   @id @default(uuid())
+  region_id       String
+  old_geometry    Unsupported("geometry(Polygon, 4326)")
+  new_geometry    Unsupported("geometry(Polygon, 4326)")
+  area_difference Float?
+  submitted_by    String
+  approved        Boolean  @default(false)
+  approved_by     String?
+  created_at      DateTime @default(now())
+  region          Region   @relation(fields: [region_id], references: [id], onDelete: Cascade)
+
+  @@map("boundary_revisions")
+}
+
+model AIKnowledgeBase {
+  id        String                 @id @default(uuid())
+  content   String                 @db.Text
+  embedding Unsupported("vector(1536)")? // For OpenAI embeddings
+  created_at DateTime              @default(now())
+
+  @@map("ai_knowledge_base")
+}
