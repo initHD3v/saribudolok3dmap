@@ -172,29 +172,50 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       }
     };
 
-    // V3 Fix: Procedural Polygon Generation to ensure perfect alignment
-    const createHeroPolygon = (center: [number, number], radiusKm: number, points: number = 64) => {
-      const coords = [];
-      const distanceX = radiusKm / (111.32 * Math.cos(center[1] * Math.PI / 180));
-      const distanceY = radiusKm / 110.574;
-
-      for (let i = 0; i <= points; i++) {
-        const theta = (i / points) * (2 * Math.PI);
-        const x = distanceX * Math.cos(theta);
-        const y = distanceY * Math.sin(theta);
-        coords.push([center[0] + x, center[1] + y]);
+    // V3 Fix: Shift Geometry utility to align original shape with correct center
+    const shiftGeometry = (geometry: any, offsetLng: number, offsetLat: number) => {
+      if (geometry.type === 'Polygon') {
+        const newCoordinates = geometry.coordinates.map((ring: any) =>
+          ring.map((coord: any) => [coord[0] + offsetLng, coord[1] + offsetLat])
+        );
+        return { ...geometry, coordinates: newCoordinates };
       }
-      return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: { name: 'Saribudolok Center' } };
+      return geometry;
     };
 
     loadGeoData().then(data => {
-      // Use procedural polygon centered at target coordinates for the 'Hero Zone'
-      // to avoid misalignment issues with the external GeoJSON file
-      const heroPoly = createHeroPolygon([98.6104, 2.9387], 0.8) as any; // Final precision: RS. GKPS Bethesda
-      const heroData = { type: 'FeatureCollection', features: [heroPoly] };
+      let heroPoly = null;
 
       if (data && data.features && data.features.length > 0) {
-        const feature = heroPoly; // Use the accurate procedural feature for bounds and masks
+        const originalFeature = data.features[0];
+        const originalCenter = [98.6087771, 2.9956262]; // From saribudolok.geojson props
+        const targetCenter = [98.6104, 2.9387]; // RS. GKPS Bethesda
+
+        const offsetLng = targetCenter[0] - originalCenter[0];
+        const offsetLat = targetCenter[1] - originalCenter[1];
+
+        heroPoly = {
+          ...originalFeature,
+          geometry: shiftGeometry(originalFeature.geometry, offsetLng, offsetLat)
+        };
+      } else {
+        // Fallback to circular if GeoJSON loading fails entirely
+        heroPoly = {
+          type: 'Feature',
+          properties: { name: 'Saribudolok Fallback' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [98.6088, 2.9956], [98.6120, 2.9956], [98.6120, 2.9980], [98.6088, 2.9980], [98.6088, 2.9956]
+            ]]
+          }
+        };
+      }
+
+      const heroData = { type: 'FeatureCollection', features: [heroPoly] };
+
+      if (heroPoly) {
+        const feature = heroPoly as any;
         // We still load 'data' for potential boundaries but prioritize heroData for the 3D Effect
         map.addSource('saribudolok', { type: 'geojson', data: heroData as any });
 
