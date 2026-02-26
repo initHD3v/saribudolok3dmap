@@ -117,6 +117,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       });
     });
 
+
     map.on('error', (e) => {
       console.error('❌ Map engine error:', e);
       setMapLoaded(true);
@@ -178,7 +179,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     loadGeoData().then(data => {
       // Use procedural polygon centered at target coordinates for the 'Hero Zone'
       // to avoid misalignment issues with the external GeoJSON file
-      const heroPoly = createHeroPolygon([98.6088, 2.9956], 0.8) as any; // 800m radius focus
+      const heroPoly = createHeroPolygon([98.6135, 2.9201], 0.8) as any; // Corrected coords: 2.9201, 98.6135
       const heroData = { type: 'FeatureCollection', features: [heroPoly] };
 
       if (data && data.features && data.features.length > 0) {
