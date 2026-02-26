@@ -93,6 +93,36 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       map.setTerrain({ source: 'terrain', exaggeration: 1.2 });
 
       setupSaribudolokLayers(map);
+
+      // Setup Atmosphere/Fog (Cast to any to bypass lint for new MapLibre features)
+      (map as any).setFog({
+        'range': [0.5, 10],
+        'color': isDark ? '#0f172a' : '#f8fafc',
+        'horizon-blend': 0.1,
+        'space-color': isDark ? '#020617' : '#e2e8f0',
+        'star-intensity': isDark ? 0.3 : 0
+      });
+
+      // V3: Topographic Contours (High-Altitude emphasis)
+      map.addSource('contours', {
+        type: 'vector',
+        url: `https://api.maptiler.com/tiles/contours/tiles.json?key=${maptilerKey}`
+      });
+      map.addLayer({
+        id: 'contour-lines',
+        type: 'line',
+        source: 'contours',
+        'source-layer': 'contour',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': isDark ? '#ffffff' : '#000000',
+          'line-opacity': 0.08,
+          'line-width': 0.5
+        }
+      });
     });
 
     map.on('error', (e) => {
@@ -144,6 +174,18 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
 
         map.addSource('saribudolok', { type: 'geojson', data: data });
 
+        // Simple pulse animation logic
+        let step = 0;
+        const animate = () => {
+          step += 0.05;
+          const opacity = 0.4 + Math.sin(step) * 0.1;
+          if (map.getLayer('saribudolok-body')) {
+            map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', opacity);
+          }
+          requestAnimationFrame(animate);
+        };
+        animate();
+
         const maskData = {
           type: 'Feature',
           geometry: {
@@ -165,15 +207,40 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
+        // V3: Shadow Layer (Flat on ground)
+        map.addLayer({
+          id: 'saribudolok-shadow',
+          type: 'fill',
+          source: 'saribudolok',
+          paint: {
+            'fill-color': '#000',
+            'fill-opacity': 0.3,
+          }
+        });
+
+        // V3: Floating Glass Body
         map.addLayer({
           id: 'saribudolok-body',
           type: 'fill-extrusion',
           source: 'saribudolok',
           paint: {
             'fill-extrusion-color': isDark ? '#ffffff' : '#3b82f6',
-            'fill-extrusion-height': 30,
-            'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.5,
+            'fill-extrusion-height': 50,
+            'fill-extrusion-base': 15,
+            'fill-extrusion-opacity': 0.4,
+          }
+        });
+
+        // V3: Geometric Mesh Grid Layer
+        map.addLayer({
+          id: 'saribudolok-mesh',
+          type: 'line',
+          source: 'saribudolok',
+          paint: {
+            'line-color': isDark ? '#60a5fa' : '#2563eb',
+            'line-width': 1,
+            'line-opacity': 0.3,
+            'line-dasharray': [2, 1],
           }
         });
 
@@ -198,28 +265,58 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
-        // Glow Border (thick & blurred)
+        // V3: 3D Pulse Markers for Landmarks
+        const landmarkSource: any = {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [
+              { type: 'Feature', properties: { name: 'Paropo' }, geometry: { type: 'Point', coordinates: [98.5430, 2.9230] } },
+              { type: 'Feature', properties: { name: 'Aek Nauli' }, geometry: { type: 'Point', coordinates: [98.5800, 2.9500] } },
+              { type: 'Feature', properties: { name: 'Simalem' }, geometry: { type: 'Point', coordinates: [98.5140, 2.9770] } },
+            ]
+          }
+        };
+        map.addSource('landmarks', landmarkSource);
+
         map.addLayer({
-          id: 'saribudolok-glow',
-          type: 'line',
-          source: 'saribudolok',
+          id: 'landmarks-pillars',
+          type: 'fill-extrusion',
+          source: 'landmarks',
           paint: {
-            'line-color': '#3b82f6',
-            'line-width': 8,
-            'line-blur': 6,
-            'line-opacity': 0.6,
+            'fill-extrusion-color': '#60a5fa',
+            'fill-extrusion-height': 150,
+            'fill-extrusion-base': 0,
+            'fill-extrusion-opacity': 0.8,
           }
         });
 
-        // Sharp Neon Border
         map.addLayer({
-          id: 'saribudolok-outline',
-          type: 'line',
-          source: 'saribudolok',
+          id: 'landmarks-glow',
+          type: 'circle',
+          source: 'landmarks',
           paint: {
-            'line-color': '#60a5fa',
-            'line-width': 2,
-            'line-opacity': 0.9,
+            'circle-radius': 12,
+            'circle-color': '#3b82f6',
+            'circle-opacity': 0.4,
+            'circle-blur': 1,
+          }
+        });
+
+        map.addLayer({
+          id: 'landmarks-labels',
+          type: 'symbol',
+          source: 'landmarks',
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 10,
+            'text-offset': [0, 1.5],
+            'text-anchor': 'top',
+          },
+          paint: {
+            'text-color': '#fff',
+            'text-halo-color': '#000',
+            'text-halo-width': 1
           }
         });
 
@@ -227,12 +324,14 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           map.getCanvas().style.cursor = 'pointer';
           map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', 0.8);
           map.setPaintProperty('saribudolok-body', 'fill-extrusion-color', '#60a5fa');
+          map.setPaintProperty('saribudolok-body', 'fill-extrusion-height', 60);
         });
 
         map.on('mouseleave', 'saribudolok-body', () => {
           map.getCanvas().style.cursor = '';
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', 0.5);
+          map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', 0.4);
           map.setPaintProperty('saribudolok-body', 'fill-extrusion-color', isDark ? '#ffffff' : '#3b82f6');
+          map.setPaintProperty('saribudolok-body', 'fill-extrusion-height', 50);
         });
 
         const coordinates = feature.geometry.coordinates[0];

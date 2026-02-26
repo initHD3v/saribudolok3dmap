@@ -1,0 +1,135 @@
+# Improve Website: Konten Informatif Saribudolok
+
+Menambahkan konten informatif yang komprehensif dan intuitif agar pengunjung — baik dari luar kota maupun penduduk asli — dapat lebih mengenal Saribudolok. Informasi ditampilkan melalui tab-based sidebar yang interaktif.
+
+## Proposed Changes
+
+### Data Layer
+
+#### [NEW] [saribudolokData.ts](file:///Users/initialh/Projects/saribudolok/apps/web/src/data/saribudolokData.ts)
+
+Data statis komprehensif tentang Saribudolok mencakup:
+- **Overview**: nama, kode wilayah, luas, elevasi, iklim, koordinat, deskripsi umum
+- **Geography**: topografi, jenis tanah, curah hujan, suhu, ketinggian, batas wilayah
+- **Tourism**: daftar destinasi wisata (Paropo, Aek Nauli, dll) dengan deskripsi & gambar
+- **Culture**: etnis Simalungun, bahasa, tradisi, makanan khas, mata pencaharian, populasi
+
+> [!NOTE]
+> Data menggunakan informasi nyata yang bisa ditemukan tentang Saribudolok. Nanti bisa di-update dengan data yang lebih akurat dari user.
+
+---
+
+### Komponen UI Baru
+
+#### [NEW] [WelcomeOverlay.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/welcome/WelcomeOverlay.tsx)
+
+Layar pembuka animasi saat pertama kali mengakses website:
+- Background gradient gelap + animasi partikel/peta
+- Heading "Selamat Datang di Saribudolok"
+- Tagline deskriptif singkat
+- Tombol "Jelajahi Sekarang" → dismiss overlay, reveal peta 3D
+- Animasi Framer Motion: fade-in heading → slide-up tagline → tombol pulse
+- Session-based: hanya muncul sekali per sesi browser
+
+#### [NEW] [InfoSidebar.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/InfoSidebar.tsx)
+
+Refactor sidebar menjadi tab-based panel yang lebih kaya informasi:
+- **4 tab**: 📊 Overview | 🏔️ Geografi | 🏖️ Wisata | 🎭 Budaya
+- Tab navigation dengan ikon + animasi underline
+- Konten tab smooth transition (Framer Motion AnimatePresence)
+- Glassmorphism styling konsisten
+- Scroll area di dalam setiap tab
+
+#### [NEW] [TabOverview.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabOverview.tsx)
+
+Konten tab Overview:
+- Deskripsi "Apa itu Saribudolok?" — paragraf informatif
+- Grid statistik: Luas Wilayah, Elevasi, Populasi, Suhu Rata-rata
+- Menggunakan komponen `StatCard` reusable
+- Infobox: kode wilayah, kecamatan, kabupaten, provinsi
+
+#### [NEW] [TabGeography.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabGeography.tsx)
+
+Konten tab Geografi:
+- Topografi & kondisi tanah
+- Data iklim: curah hujan, suhu min/max, kelembapan
+- Batas wilayah (utara, selatan, timur, barat)
+- Ketinggian & kontur
+
+#### [NEW] [TabTourism.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabTourism.tsx)
+
+Konten tab Wisata:
+- Daftar destinasi card-based (gambar + nama + deskripsi singkat)
+- Setiap card bisa di-klik untuk expand detail
+- Kategori: Alam, Budaya, Kuliner
+
+#### [NEW] [TabCulture.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabCulture.tsx)
+
+Konten tab Budaya:
+- Etnis & bahasa dominan
+- Tradisi & upacara adat
+- Makanan khas
+- Mata pencaharian utama
+
+#### [NEW] [StatCard.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/ui/StatCard.tsx)
+
+Komponen reusable untuk menampilkan statistik:
+- Ikon + Label (kecil, uppercase, tracking-widest)
+- Nilai besar + unit
+- Animasi count-up saat visible
+
+#### [NEW] [ImageGallery.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/ui/ImageGallery.tsx)
+
+Komponen galeri foto sederhana:
+- Horizontal scroll pada mobile, grid pada desktop
+- Klik untuk membesar (lightbox modal)
+- Caption di bawah gambar
+
+---
+
+### Gambar & Aset
+
+Akan generate gambar menggunakan `generate_image` tool untuk:
+- Hero image Saribudolok (pemandangan pegunungan/danau)
+- 4-5 foto destinasi wisata
+- Gambar untuk welcome overlay background
+
+---
+
+### File yang Dimodifikasi
+
+#### [MODIFY] [page.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/page.tsx)
+
+- Hapus inline sidebar code lama → ganti dengan `<InfoSidebar />`
+- Tambah `<WelcomeOverlay />` di atas segalanya
+- Bersihkan kode agar lebih modular
+
+#### [MODIFY] [layout.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/layout.tsx)
+
+- Update metadata SEO: title → "Saribudolok — Jelajahi 3D Geo Experience"
+- Update description → deskripsi informatif tentang Saribudolok
+
+#### [MODIFY] [globals.css](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/globals.css)
+
+- Tambah styling untuk tab navigation
+- Animasi & transisi tambahan
+- Custom scrollbar improvements
+
+---
+
+## Verification Plan
+
+### Browser Visual Test
+
+Verifikasi di browser menggunakan browser subagent:
+
+1. Jalankan dev server: `npm run dev` di `apps/web`
+2. Buka `http://localhost:3000`
+3. **Welcome Overlay test**: pastikan overlay muncul, tombol berfungsi, overlay menghilang
+4. **Tab navigation test**: klik semua 4 tab, pastikan konten berganti dengan animasi
+5. **Content test**: pastikan semua data Saribudolok tampil (luas, elevasi, wisata, budaya)
+6. **Dark/Light mode test**: toggle tema, pastikan semua konten terlihat di kedua mode
+7. **Scrolling test**: pastikan scroll di dalam tab berfungsi
+
+> [!IMPORTANT]
+> Backend tidak diperlukan untuk fitur ini karena semua data menggunakan static data layer. Koneksi ke backend bisa dilakukan nanti di fase enrichment.

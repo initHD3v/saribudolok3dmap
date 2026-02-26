@@ -1,0 +1,40 @@
+# Task: Improve Website dengan Konten Informatif Saribudolok
+
+## Planning
+- [x] Analisis keseluruhan proyek
+- [x] Buat implementation plan
+- [x] Review & approval dari user
+
+## Execution
+
+### Data Layer
+- [x] Buat file [saribudolokData.ts](file:///Users/initialh/Projects/saribudolok/apps/web/src/data/saribudolokData.ts) — data statis komprehensif tentang Saribudolok
+- [x] Generate gambar-gambar aset untuk galeri & hero (6 gambar)
+
+### Komponen UI
+- [x] [WelcomeOverlay](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/welcome/WelcomeOverlay.tsx#9-151) — layar pembuka animasi "Welcome to Saribudolok"
+- [x] [InfoSidebar](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/InfoSidebar.tsx#21-122) — sidebar refactor dengan tab sistem (Overview, Geography, Tourism, Culture)
+- [x] [TabOverview](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabOverview.tsx#9-69) — luas, elevasi, iklim, deskripsi umum
+- [x] [TabGeography](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabGeography.tsx#24-96) — data geografis, topografi, peta mini
+- [x] [TabTourism](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabTourism.tsx#9-113) — destinasi wisata, galeri foto
+- [x] [TabCulture](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabCulture.tsx#10-158) — budaya, mata pencaharian, etnis
+- [x] [StatCard](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/ui/StatCard.tsx#15-42) — komponen reusable untuk statistik
+- [x] [ImageGallery](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/ui/ImageGallery.tsx#12-95) — lightbox galeri foto
+
+### Halaman & Integrasi
+- [x] Update [page.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/page.tsx) — integrasi komponen baru
+- [x] Update [layout.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/layout.tsx) — SEO metadata
+- [x] Update [globals.css](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/globals.css) — styling baru
+
+## Verification
+- [x] Visual test via browser — semua tab tampil & navigasi lancar
+- [x] Fix Load failed error — fallback GeoJSON lokal
+
+---
+
+## Aktivasi Fitur Navigasi & Interaktif
+- [ ] Top nav tabs: Explore → Overview, Discover → Wisata, Learn → Geografi, AI → panel chat placeholder
+- [ ] Search "Jump to Region" — fly kamera ke Saribudolok
+- [ ] Menu button — slide-out drawer
+- [ ] 2D/3D toggle — fungsikan switch pitch
+- [ ] Verifikasi di browser

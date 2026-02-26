@@ -1,0 +1,66 @@
+# 🗺️ Walkthrough: Konten Informatif Saribudolok
+
+## Apa yang Diimplementasi
+
+Menambahkan konten informatif komprehensif tentang Saribudolok ke website agar pengunjung dapat mengenal desa ini lebih dalam.
+
+### File Baru (10 file)
+
+| File | Deskripsi |
+|------|-----------|
+| [saribudolokData.ts](file:///Users/initialh/Projects/saribudolok/apps/web/src/data/saribudolokData.ts) | Data statis lengkap: overview, geografi, wisata, budaya, ekonomi |
+| [WelcomeOverlay.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/welcome/WelcomeOverlay.tsx) | Layar pembuka animasi (session-based) |
+| [InfoSidebar.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/InfoSidebar.tsx) | Sidebar dengan 4-tab navigation + collapse/expand |
+| [TabOverview.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabOverview.tsx) | Tab ringkasan: deskripsi, statistik, info wilayah |
+| [TabGeography.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabGeography.tsx) | Tab geografi: topografi, iklim, batas wilayah |
+| [TabTourism.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabTourism.tsx) | Tab wisata: card destinasi expandable |
+| [TabCulture.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/sidebar/tabs/TabCulture.tsx) | Tab budaya: tradisi, kuliner, ekonomi, galeri |
+| [StatCard.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/ui/StatCard.tsx) | Komponen statistik reusable |
+| [ImageGallery.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/ui/ImageGallery.tsx) | Galeri foto dengan lightbox |
+| `public/geojson/saribudolok.geojson` | Fallback GeoJSON lokal |
+
+### File Dimodifikasi (3 file)
+
+| File | Perubahan |
+|------|-----------|
+| [page.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/page.tsx) | Integrasi WelcomeOverlay & InfoSidebar, hapus sidebar inline |
+| [layout.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/app/layout.tsx) | SEO metadata: title & description |
+| [Map3D.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/map/Map3D.tsx) | Fallback ke GeoJSON lokal saat backend offline |
+
+### Gambar Aset (6 gambar)
+
+Semua di `public/images/`: `hero.png`, `wisata-paropo.png`, `wisata-aek-nauli.png`, `wisata-simalem.png`, `budaya-simalungun.png`, `pertanian.png`
+
+---
+
+## Hasil Verifikasi
+
+### Welcome Overlay ✅
+![Welcome Overlay — animasi "Selamat Datang di Saribudolok" dengan hero image dan statistik](/Users/initialh/.gemini/antigravity/brain/8112e2b4-c8a3-401c-b945-5613d12b8a41/welcome_overlay_1772110503922.png)
+
+### Peta 3D + Sidebar Tab "Ringkasan" ✅
+![Peta 3D dengan sidebar tab Ringkasan — menampilkan deskripsi, stat cards, dan info wilayah](/Users/initialh/.gemini/antigravity/brain/8112e2b4-c8a3-401c-b945-5613d12b8a41/map_overview_tab_1772110545457.png)
+
+### Tab "Geografi" ✅
+![Tab Geografi — data topografi, iklim, dan batas wilayah](/Users/initialh/.gemini/antigravity/brain/8112e2b4-c8a3-401c-b945-5613d12b8a41/geografi_tab_1772110651467.png)
+
+### Tab "Wisata" ✅
+![Tab Wisata — card destinasi dengan gambar dan detail expandable](/Users/initialh/.gemini/antigravity/brain/8112e2b4-c8a3-401c-b945-5613d12b8a41/wisata_tab_1772110721707.png)
+
+### Tab "Budaya" ✅
+![Tab Budaya — tradisi, kuliner khas, ekonomi, dan galeri foto](/Users/initialh/.gemini/antigravity/brain/8112e2b4-c8a3-401c-b945-5613d12b8a41/budaya_tab_scrolled_1772111260737.png)
+
+### Fix: Load Failed Error ✅
+Error "Load failed" terjadi karena [Map3D.tsx](file:///Users/initialh/Projects/saribudolok/apps/web/src/components/map/Map3D.tsx) mencoba fetch ke backend (`localhost:3001`) yang tidak berjalan. Diperbaiki dengan menambahkan fallback ke file GeoJSON lokal di `public/geojson/saribudolok.geojson`.
+
+---
+
+## Cara Menjalankan
+
+```bash
+cd apps/web
+npm run dev
+```
+
+> [!NOTE]
+> Backend tidak diperlukan — semua konten informatif menggunakan data statis dan GeoJSON fallback lokal. Website berjalan di `http://localhost:3000` (atau port alternatif jika 3000 sedang digunakan).
