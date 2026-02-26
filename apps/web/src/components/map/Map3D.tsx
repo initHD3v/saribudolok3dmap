@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } f
 import maplibregl from 'maplibre-gl';
 import { Navigation } from 'lucide-react';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import saribudolokData from '@/data/saribudolokData';
 
 interface Map3DProps {
   center?: [number, number];
@@ -143,6 +144,38 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     };
   }, [isDark]);
 
+  // Auto-Geolocation Camera logic
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+
+    const map = mapRef.current;
+
+    // Check for geolocation
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { longitude, latitude } = position.coords;
+          map.flyTo({
+            center: [longitude, latitude],
+            zoom: 14,
+            duration: 3000,
+            essential: true
+          });
+        },
+        (error) => {
+          console.warn('Geolocation Error atau Permisi Ditolak:', error);
+          // Fly to Saribudolok if GPS fails
+          map.flyTo({
+            center: [saribudolokData.longitude, saribudolokData.latitude],
+            zoom: 13,
+            duration: 3000
+          });
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+  }, [mapLoaded]);
+
   const setupSaribudolokLayers = (map: maplibregl.Map) => {
     const apiUrl = 'http://localhost:3001/regions';
 
@@ -219,17 +252,62 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         // We still load 'data' for potential boundaries but prioritize heroData for the 3D Effect
         map.addSource('saribudolok', { type: 'geojson', data: heroData as any });
 
-        // Simple pulse animation logic
+        // Simple pulse animation logic for layers
         let step = 0;
         const animate = () => {
           step += 0.05;
-          const opacity = 0.4 + Math.sin(step) * 0.1;
-          if (map.getLayer('saribudolok-body')) {
-            map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', opacity);
+          const opacity = 0.5 + Math.sin(step) * 0.2;
+          const glowRadius = 5 + Math.sin(step) * 2;
+
+          if (map.getLayer('saribudolok-outline')) {
+            map.setPaintProperty('saribudolok-outline', 'line-opacity', opacity);
+          }
+          if (map.getLayer('landmarks-pulse')) {
+            map.setPaintProperty('landmarks-pulse', 'circle-radius', glowRadius);
           }
           requestAnimationFrame(animate);
         };
         animate();
+
+        // Calculate Boundary Info Points (North, South, East, West)
+        const coords = feature.geometry.coordinates[0];
+        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+        coords.forEach(([lng, lat]: [number, number]) => {
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+        });
+
+        const boundaryInfoData = {
+          type: 'FeatureCollection',
+          features: [
+            { type: 'Feature', geometry: { type: 'Point', coordinates: [(minLng + maxLng) / 2, maxLat] }, properties: { label: `Batas Utara: ${saribudolokData.boundaries.utara}` } },
+            { type: 'Feature', geometry: { type: 'Point', coordinates: [(minLng + maxLng) / 2, minLat] }, properties: { label: `Batas Selatan: ${saribudolokData.boundaries.selatan}` } },
+            { type: 'Feature', geometry: { type: 'Point', coordinates: [maxLng, (minLat + maxLat) / 2] }, properties: { label: `Batas Timur: ${saribudolokData.boundaries.timur}` } },
+            { type: 'Feature', geometry: { type: 'Point', coordinates: [minLng, (minLat + maxLat) / 2] }, properties: { label: `Batas Barat: ${saribudolokData.boundaries.barat}` } },
+          ]
+        };
+
+        map.addSource('boundary-info', { type: 'geojson', data: boundaryInfoData as any });
+        map.addLayer({
+          id: 'boundary-info-labels',
+          type: 'symbol',
+          source: 'boundary-info',
+          layout: {
+            'text-field': ['get', 'label'],
+            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+            'text-size': 11,
+            'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+            'text-radial-offset': 1.5,
+            'text-justify': 'auto',
+          },
+          paint: {
+            'text-color': '#60a5fa',
+            'text-halo-color': 'rgba(0,0,0,0.8)',
+            'text-halo-width': 2
+          }
+        });
 
         const maskData = {
           type: 'Feature',
@@ -263,16 +341,29 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
-        // V3: Floating Glass Body
+        // V3 Refinement: Outline Only (Floating Neon Line)
+        map.addLayer({
+          id: 'saribudolok-outline',
+          type: 'line',
+          source: 'saribudolok',
+          paint: {
+            'line-color': '#60a5fa',
+            'line-width': 3,
+            'line-opacity': 0.8,
+            'line-blur': 1,
+          }
+        });
+
+        // V3 Refinement: Very subtle glass body (almost invisible fill)
         map.addLayer({
           id: 'saribudolok-body',
           type: 'fill-extrusion',
           source: 'saribudolok',
           paint: {
-            'fill-extrusion-color': isDark ? '#ffffff' : '#3b82f6',
-            'fill-extrusion-height': 50,
-            'fill-extrusion-base': 15,
-            'fill-extrusion-opacity': 0.4,
+            'fill-extrusion-color': '#60a5fa',
+            'fill-extrusion-height': 25,
+            'fill-extrusion-base': 24.5,
+            'fill-extrusion-opacity': 0.1,
           }
         });
 
