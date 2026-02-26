@@ -106,8 +106,8 @@ const saribudolokData: SaribudolokData = {
     elevation: 1400,
     population: 3200,
     populationYear: 2024,
-    latitude: 2.9201,
-    longitude: 98.6135,
+    latitude: 2.9387,
+    longitude: 98.6104,
 
     // === GEOGRAFI ===
     topography:

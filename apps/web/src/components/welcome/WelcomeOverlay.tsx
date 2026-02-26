@@ -102,10 +102,26 @@ export default function WelcomeOverlay() {
                             initial={{ y: 20, opacity: 0 }}
                             animate={imageLoaded ? { y: 0, opacity: 1 } : {}}
                             transition={{ delay: 1.0, duration: 0.6 }}
-                            className="text-sm md:text-base text-white/60 leading-relaxed mb-10 max-w-lg mx-auto"
+                            className="text-sm md:text-base text-white/60 leading-relaxed mb-6 max-w-lg mx-auto"
                         >
                             {saribudolokData.welcomeText}
                         </motion.p>
+
+                        {/* GPS Permission Notice */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={imageLoaded ? { opacity: 1, scale: 1 } : {}}
+                            transition={{ delay: 1.2, duration: 0.5 }}
+                            className="inline-flex flex-col items-center gap-2 p-4 rounded-xl bg-white/5 border border-white/10 mb-8 max-w-sm"
+                        >
+                            <div className="flex items-center gap-2 text-xs font-bold text-blue-400 uppercase tracking-widest">
+                                <Navigation className="w-4 h-4" />
+                                <span>Izin Lokasi (GPS)</span>
+                            </div>
+                            <p className="text-[11px] text-white/40 leading-tight">
+                                Berikan akses lokasi agar platform dapat mendeteksi posisi Anda secara real-time pada peta Saribudolok.
+                            </p>
+                        </motion.div>
 
                         {/* CTA Button */}
                         <motion.button

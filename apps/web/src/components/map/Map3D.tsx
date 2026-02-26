@@ -115,6 +115,17 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           'line-width': 0.5
         }
       });
+
+      // Map Controls
+      map.addControl(new maplibregl.NavigationControl(), 'top-right');
+      map.addControl(new maplibregl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+      }), 'bottom-right');
+
+      setMapLoaded(true);
     });
 
 
@@ -179,7 +190,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     loadGeoData().then(data => {
       // Use procedural polygon centered at target coordinates for the 'Hero Zone'
       // to avoid misalignment issues with the external GeoJSON file
-      const heroPoly = createHeroPolygon([98.6135, 2.9201], 0.8) as any; // Corrected coords: 2.9201, 98.6135
+      const heroPoly = createHeroPolygon([98.6104, 2.9387], 0.8) as any; // Final precision: RS. GKPS Bethesda
       const heroData = { type: 'FeatureCollection', features: [heroPoly] };
 
       if (data && data.features && data.features.length > 0) {
