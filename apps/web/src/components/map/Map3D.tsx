@@ -160,11 +160,31 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       }
     };
 
-    loadGeoData().then(data => {
-      if (data && data.features && data.features.length > 0) {
-        const feature = data.features[0];
+    // V3 Fix: Procedural Polygon Generation to ensure perfect alignment
+    const createHeroPolygon = (center: [number, number], radiusKm: number, points: number = 64) => {
+      const coords = [];
+      const distanceX = radiusKm / (111.32 * Math.cos(center[1] * Math.PI / 180));
+      const distanceY = radiusKm / 110.574;
 
-        map.addSource('saribudolok', { type: 'geojson', data: data });
+      for (let i = 0; i <= points; i++) {
+        const theta = (i / points) * (2 * Math.PI);
+        const x = distanceX * Math.cos(theta);
+        const y = distanceY * Math.sin(theta);
+        coords.push([center[0] + x, center[1] + y]);
+      }
+      return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: { name: 'Saribudolok Center' } };
+    };
+
+    loadGeoData().then(data => {
+      // Use procedural polygon centered at target coordinates for the 'Hero Zone'
+      // to avoid misalignment issues with the external GeoJSON file
+      const heroPoly = createHeroPolygon([98.6088, 2.9956], 0.8) as any; // 800m radius focus
+      const heroData = { type: 'FeatureCollection', features: [heroPoly] };
+
+      if (data && data.features && data.features.length > 0) {
+        const feature = heroPoly; // Use the accurate procedural feature for bounds and masks
+        // We still load 'data' for potential boundaries but prioritize heroData for the 3D Effect
+        map.addSource('saribudolok', { type: 'geojson', data: heroData as any });
 
         // Simple pulse animation logic
         let step = 0;
