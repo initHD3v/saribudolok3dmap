@@ -15,7 +15,7 @@
 ### **"Bringing the Beauty of Saribudolok to the Digital Dimension"**
 Platform eksplorasi geografis interaktif yang memvisualisasikan data, budaya, dan potensi Desa Saribudolok dalam format 3D yang modern, imersif, dan edukatif.
 
-[🌐 Live Demo](https://saribudolok.vercel.app) • [📖 Knowledge Base](#-dokumentasi-&--data) • [🚀 Quick Start](#-cara-menjalankan-local)
+[🌐 Live Demo](https://saribudolok3dmap-web.vercel.app) • [📖 Knowledge Base](#-dokumentasi-&--data) • [🚀 Quick Start](#-cara-menjalankan-local)
 
 </div>
 
