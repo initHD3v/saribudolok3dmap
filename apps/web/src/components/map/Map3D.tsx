@@ -249,6 +249,8 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
             'text-transform': 'uppercase',
             'text-anchor': 'center',
             'text-offset': [0, 0],
+            'symbol-placement': 'point',
+            'text-allow-overlap': false,
           },
           paint: {
             'text-color': '#fff',
