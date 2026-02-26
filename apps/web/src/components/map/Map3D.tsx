@@ -94,14 +94,6 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
 
       setupSaribudolokLayers(map);
 
-      // Setup Atmosphere/Fog (Cast to any to bypass lint for new MapLibre features)
-      (map as any).setFog({
-        'range': [0.5, 10],
-        'color': isDark ? '#0f172a' : '#f8fafc',
-        'horizon-blend': 0.1,
-        'space-color': isDark ? '#020617' : '#e2e8f0',
-        'star-intensity': isDark ? 0.3 : 0
-      });
 
       // V3: Topographic Contours (High-Altitude emphasis)
       map.addSource('contours', {
