@@ -247,16 +247,12 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         // We still load 'data' for potential boundaries but prioritize heroData for the 3D Effect
         map.addSource('saribudolok', { type: 'geojson', data: heroData as any });
 
-        // Simple pulse animation logic for layers
+        // Animation logic kept only for landmarks
         let step = 0;
         const animate = () => {
           step += 0.05;
-          const opacity = 0.5 + Math.sin(step) * 0.2;
           const glowRadius = 5 + Math.sin(step) * 2;
 
-          if (map.getLayer('saribudolok-outline')) {
-            map.setPaintProperty('saribudolok-outline', 'line-opacity', opacity);
-          }
           if (map.getLayer('landmarks-pulse')) {
             map.setPaintProperty('landmarks-pulse', 'circle-radius', glowRadius);
           }
@@ -317,18 +313,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
-        // V3 Refinement: Very subtle glass body (almost invisible fill)
-        map.addLayer({
-          id: 'saribudolok-body',
-          type: 'fill-extrusion',
-          source: 'saribudolok',
-          paint: {
-            'fill-extrusion-color': '#60a5fa',
-            'fill-extrusion-height': 25,
-            'fill-extrusion-base': 24.5,
-            'fill-extrusion-opacity': 0,
-          }
-        });
+        // Note: saribudolok-body removed to prevent solid blue block
 
         // V3: Geometric Mesh Grid Layer
         map.addLayer({
@@ -421,31 +406,22 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
-        map.on('mouseenter', 'saribudolok-body', () => {
-          map.getCanvas().style.cursor = 'pointer';
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', 0.8);
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-color', '#60a5fa');
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-height', 60);
-        });
-
-        map.on('mouseleave', 'saribudolok-body', () => {
-          map.getCanvas().style.cursor = '';
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-opacity', 0.4);
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-color', isDark ? '#ffffff' : '#3b82f6');
-          map.setPaintProperty('saribudolok-body', 'fill-extrusion-height', 50);
-        });
+        // Hover listeners removed to prevent solid block reappearing
 
         const coordinates = feature.geometry.coordinates[0];
         const bounds = coordinates.reduce((acc: any, coord: any) => {
           return acc.extend(coord);
         }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
 
+        // Automatic fitBounds disabled to prevent overriding auto-GPS flyTo
+        /*
         map.fitBounds(bounds, {
           padding: 120,
           duration: 2500,
           pitch: 65,
           bearing: -20,
         });
+        */
       }
     });
   };
