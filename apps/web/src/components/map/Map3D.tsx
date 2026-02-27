@@ -16,6 +16,7 @@ interface Map3DProps {
 export interface Map3DHandle {
   flyToCenter: () => void;
   setPitch: (pitch: number) => void;
+  triggerGeolocation: () => void;
 }
 
 const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
@@ -47,6 +48,30 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         duration: 1500,
       });
     },
+    triggerGeolocation: () => {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { longitude, latitude } = position.coords;
+            mapRef.current?.flyTo({
+              center: [longitude, latitude],
+              zoom: 14,
+              duration: 3000,
+              essential: true
+            });
+          },
+          (error) => {
+            console.warn('Geolocation Error:', error);
+            mapRef.current?.flyTo({
+              center: [saribudolokData.longitude, saribudolokData.latitude],
+              zoom: 13,
+              duration: 3000
+            });
+          },
+          { enableHighAccuracy: true }
+        );
+      }
+    }
   }));
 
   useEffect(() => {
@@ -144,37 +169,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     };
   }, [isDark]);
 
-  // Auto-Geolocation Camera logic
-  useEffect(() => {
-    if (!mapLoaded || !mapRef.current) return;
-
-    const map = mapRef.current;
-
-    // Check for geolocation
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { longitude, latitude } = position.coords;
-          map.flyTo({
-            center: [longitude, latitude],
-            zoom: 14,
-            duration: 3000,
-            essential: true
-          });
-        },
-        (error) => {
-          console.warn('Geolocation Error atau Permisi Ditolak:', error);
-          // Fly to Saribudolok if GPS fails
-          map.flyTo({
-            center: [saribudolokData.longitude, saribudolokData.latitude],
-            zoom: 13,
-            duration: 3000
-          });
-        },
-        { enableHighAccuracy: true }
-      );
-    }
-  }, [mapLoaded]);
+  // Auto-Geolocation Camera logic (Handled via Ref now)
 
   const setupSaribudolokLayers = (map: maplibregl.Map) => {
     const apiUrl = 'http://localhost:3001/regions';
@@ -309,38 +304,6 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
-        const maskData = {
-          type: 'Feature',
-          geometry: {
-            type: 'Polygon',
-            coordinates: [
-              [[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]],
-              feature.geometry.coordinates[0]
-            ]
-          }
-        };
-        map.addSource('mask', { type: 'geojson', data: maskData as any });
-        map.addLayer({
-          id: 'focus-mask',
-          type: 'fill',
-          source: 'mask',
-          paint: {
-            'fill-color': isDark ? '#000' : '#fff',
-            'fill-opacity': 0.4
-          }
-        });
-
-        // V3: Shadow Layer (Flat on ground)
-        map.addLayer({
-          id: 'saribudolok-shadow',
-          type: 'fill',
-          source: 'saribudolok',
-          paint: {
-            'fill-color': '#000',
-            'fill-opacity': 0.3,
-          }
-        });
-
         // V3 Refinement: Outline Only (Floating Neon Line)
         map.addLayer({
           id: 'saribudolok-outline',
@@ -363,7 +326,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
             'fill-extrusion-color': '#60a5fa',
             'fill-extrusion-height': 25,
             'fill-extrusion-base': 24.5,
-            'fill-extrusion-opacity': 0.1,
+            'fill-extrusion-opacity': 0,
           }
         });
 

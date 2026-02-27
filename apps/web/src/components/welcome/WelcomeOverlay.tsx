@@ -6,7 +6,7 @@ import { Navigation, MapPin, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import saribudolokData from '@/data/saribudolokData';
 
-export default function WelcomeOverlay() {
+export default function WelcomeOverlay({ onDismiss }: { onDismiss?: () => void }) {
     const [visible, setVisible] = useState(false);
     const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -20,6 +20,7 @@ export default function WelcomeOverlay() {
     const handleDismiss = () => {
         sessionStorage.setItem('welcome-seen', 'true');
         setVisible(false);
+        if (onDismiss) onDismiss();
     };
 
     return (

@@ -115,7 +115,7 @@ export default function Home() {
     <main className="relative min-h-screen overflow-hidden transition-colors duration-700 ease-in-out">
 
       {/* Welcome Overlay */}
-      <WelcomeOverlay />
+      <WelcomeOverlay onDismiss={() => mapRef.current?.triggerGeolocation()} />
 
       {/* Menu Drawer */}
       <MenuDrawer isOpen={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={handleMenuNavigate} />
@@ -261,8 +261,8 @@ export default function Home() {
                 key={mode}
                 onClick={() => toggle3D(mode)}
                 className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${(mode === '3D' && is3D) || (mode === '2D' && !is3D)
-                    ? 'bg-blue-600 text-white glow-effect'
-                    : 'text-foreground/40 hover:text-foreground'
+                  ? 'bg-blue-600 text-white glow-effect'
+                  : 'text-foreground/40 hover:text-foreground'
                   }`}
               >
                 {mode}
