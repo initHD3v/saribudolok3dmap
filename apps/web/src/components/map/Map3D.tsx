@@ -20,7 +20,7 @@ export interface Map3DHandle {
 }
 
 const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
-  center = [98.60877, 2.9956],
+  center = [98.6104, 2.9387],
   zoom = 14,
   isDark = true,
   is3D = true,
@@ -328,28 +328,6 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         });
 
-        // 3D Label Layer
-        map.addLayer({
-          id: 'saribudolok-label',
-          type: 'symbol',
-          source: 'saribudolok',
-          layout: {
-            'text-field': 'SARIBUDOLOK',
-            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-            'text-size': 14,
-            'text-letter-spacing': 0.4,
-            'text-transform': 'uppercase',
-            'text-anchor': 'center',
-            'text-offset': [0, 0],
-            'symbol-placement': 'point',
-            'text-allow-overlap': false,
-          },
-          paint: {
-            'text-color': '#fff',
-            'text-halo-color': '#3b82f6',
-            'text-halo-width': 2,
-          }
-        });
 
         // V3: 3D Pulse Markers for Landmarks
         const landmarkSource: any = {

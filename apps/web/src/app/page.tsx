@@ -121,7 +121,7 @@ export default function Home() {
       <MenuDrawer isOpen={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={handleMenuNavigate} />
 
       {/* 🌍 Background: 3D Geo Map */}
-      <Map3D ref={mapRef} center={[98.60877, 2.9956]} zoom={14} isDark={isDarkMode} is3D={is3D} />
+      <Map3D ref={mapRef} center={[98.6104, 2.9387]} zoom={14} isDark={isDarkMode} is3D={is3D} />
 
       {/* 🛸 Header Navigation */}
       <header className="absolute top-0 left-0 right-0 z-50 p-6 flex justify-between items-center pointer-events-none">

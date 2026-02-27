@@ -136,7 +136,7 @@ const saribudolokData: SaribudolokData = {
     },
 
     geographyDescription:
-        'Secara geografis, Saribudolok berada di koordinat 2.9956° LU dan 98.6088° BT, membentang seluas 10,03 km² ' +
+        'Secara geografis, Saribudolok berada di koordinat 2.9387° LU dan 98.6104° BT, membentang seluas 10,03 km² ' +
         'di dataran tinggi Kabupaten Simalungun. Wilayah ini termasuk dalam zona ekosistem pegunungan Bukit Barisan ' +
         'dengan topografi berbukit yang dramatis. Curah hujan yang tinggi dan suhu sejuk menjadikan kawasan ini ' +
         'sangat hijau sepanjang tahun. Dari beberapa titik tertinggi, pengunjung dapat melihat pemandangan ' +
