@@ -1,0 +1,105 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Jl. Merdeka",
+                "type": "street"
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        98.6105,
+                        2.9415
+                    ],
+                    [
+                        98.6114,
+                        2.9402
+                    ],
+                    [
+                        98.6125,
+                        2.9385
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Jl. Kartini",
+                "type": "street"
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        98.6085,
+                        2.9375
+                    ],
+                    [
+                        98.6100,
+                        2.9375
+                    ],
+                    [
+                        98.6130,
+                        2.9375
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Jl. Sutomo",
+                "type": "street"
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        98.6110,
+                        2.9350
+                    ],
+                    [
+                        98.6110,
+                        2.9380
+                    ],
+                    [
+                        98.6110,
+                        2.9420
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "RS Bethesda GKPS",
+                "type": "public_service"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    98.6104,
+                    2.9387
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Minimarket Lokal",
+                "type": "shop"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    98.6115,
+                    2.9395
+                ]
+            }
+        }
+    ]
+}

@@ -159,27 +159,43 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         trackUserLocation: true,
       }), 'bottom-right');
 
-      // Enhance Street Names Visibility
+      // Enhance Street Names Visibility and Show Minor Roads
       const enhanceStreetLabels = () => {
         const layers = map.getStyle().layers;
         if (!layers) return;
 
         layers.forEach((layer) => {
-          if (layer.id.includes('road-label') || layer.id.includes('highway-name')) {
-            map.setLayoutProperty(layer.id, 'text-size', [
-              'interpolate', ['linear'], ['zoom'],
-              12, 10,
-              18, 16
-            ]);
-            map.setPaintProperty(layer.id, 'text-color', isDark ? '#ffffff' : '#1e293b');
-            map.setPaintProperty(layer.id, 'text-halo-color', isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)');
-            map.setPaintProperty(layer.id, 'text-halo-width', 2);
+          // Identify any road label layers (highway, major, minor, residential)
+          if (layer.id.includes('road-label') || layer.id.includes('highway-name') || layer.id.includes('road_') || layer.id.includes('street')) {
+            // Only modify layout/paint if it's a symbol layer (text)
+            if (layer.type === 'symbol') {
+              // Force minor roads to appear earlier by lowering the minzoom if it exists
+              if (layer.minzoom && layer.minzoom > 14) {
+                map.setLayerZoomRange(layer.id, 13, 24);
+              }
+
+              try {
+                map.setLayoutProperty(layer.id, 'text-size', [
+                  'interpolate', ['linear'], ['zoom'],
+                  13, 10,
+                  18, 16
+                ]);
+                // Force visibility of labels that might be hidden by default
+                map.setLayoutProperty(layer.id, 'visibility', 'visible');
+
+                map.setPaintProperty(layer.id, 'text-color', isDark ? '#ffffff' : '#1e293b');
+                map.setPaintProperty(layer.id, 'text-halo-color', isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)');
+                map.setPaintProperty(layer.id, 'text-halo-width', 2);
+              } catch (e) {
+                // Some layers might not support these specific properties, safely ignore
+              }
+            }
           }
         });
       };
 
       // Delay slightly to ensure base style layers are fully loaded
-      setTimeout(enhanceStreetLabels, 500);
+      setTimeout(enhanceStreetLabels, 1500);
 
       setMapLoaded(true);
     });
@@ -638,6 +654,85 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
 
         // Hover listeners removed to prevent solid block reappearing
 
+        // V4: Local Street & POI Layers (Injecting local database for missing OSM data)
+        fetch('/geojson/saribudolok_local.geojson')
+          .then(res => res.json())
+          .then(localData => {
+            if (map.getSource('saribudolok-local')) return;
+
+            map.addSource('saribudolok-local', { type: 'geojson', data: localData });
+
+            // 1. Local Streets Line (Subtle background for the label)
+            map.addLayer({
+              id: 'local-streets-line',
+              type: 'line',
+              source: 'saribudolok-local',
+              filter: ['==', 'type', 'street'],
+              paint: {
+                'line-color': isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                'line-width': 3,
+                'line-dasharray': [2, 1]
+              }
+            });
+
+            // 2. Local Street Labels (The solution for Jl. Kartini, Jl. Merdeka, etc)
+            map.addLayer({
+              id: 'local-streets-labels',
+              type: 'symbol',
+              source: 'saribudolok-local',
+              filter: ['==', 'type', 'street'],
+              layout: {
+                'text-field': ['get', 'name'],
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                'text-size': 13,
+                'symbol-placement': 'line',
+                'text-letter-spacing': 0.1,
+                'text-keep-upright': true,
+                'text-max-angle': 30
+              },
+              paint: {
+                'text-color': isDark ? '#ffffff' : '#1e293b',
+                'text-halo-color': isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255,255,255,0.9)',
+                'text-halo-width': 2.5
+              }
+            });
+
+            // 3. Local POI Points (Circles)
+            map.addLayer({
+              id: 'local-poi-dots',
+              type: 'circle',
+              source: 'saribudolok-local',
+              filter: ['!=', 'type', 'street'],
+              paint: {
+                'circle-radius': 5,
+                'circle-color': '#3b82f6',
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#ffffff'
+              }
+            });
+
+            // 4. Local POI Labels (Restaurants, public services, etc)
+            map.addLayer({
+              id: 'local-poi-labels',
+              type: 'symbol',
+              source: 'saribudolok-local',
+              filter: ['!=', 'type', 'street'],
+              layout: {
+                'text-field': ['get', 'name'],
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                'text-size': 11,
+                'text-offset': [0, 1.5],
+                'text-anchor': 'top'
+              },
+              paint: {
+                'text-color': '#60a5fa',
+                'text-halo-color': 'rgba(0,0,0,0.8)',
+                'text-halo-width': 1.5
+              }
+            });
+          })
+          .catch(e => console.error("Error loading local GeoJSON:", e));
+
         const coordinates = feature.geometry.coordinates[0];
         const bounds = coordinates.reduce((acc: any, coord: any) => {
           return acc.extend(coord);
@@ -750,8 +845,8 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
                 }
               }}
               className={`mt-4 w-full py-2.5 text-sm font-semibold rounded-lg transition-colors ${isDark
-                  ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
                 }`}
             >
               Tutup / Reset
