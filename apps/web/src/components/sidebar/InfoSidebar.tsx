@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart3, Mountain, Palmtree, Theater, Compass, ChevronLeft, ChevronRight } from 'lucide-react';
 import saribudolokData from '@/data/saribudolokData';
@@ -19,14 +19,13 @@ export const SIDEBAR_TABS = [
 export type SidebarTabId = typeof SIDEBAR_TABS[number]['id'];
 
 interface InfoSidebarProps {
-    isDarkMode?: boolean;
     activeTab: SidebarTabId;
     onTabChange: (tab: SidebarTabId) => void;
     collapsed: boolean;
     onCollapsedChange: (collapsed: boolean) => void;
 }
 
-export default function InfoSidebar({ isDarkMode, activeTab, onTabChange, collapsed, onCollapsedChange }: InfoSidebarProps) {
+export default function InfoSidebar({ activeTab, onTabChange, collapsed, onCollapsedChange }: InfoSidebarProps) {
     const renderTabContent = () => {
         switch (activeTab) {
             case 'overview': return <TabOverview />;

@@ -272,7 +272,6 @@ export default function Home() {
 
       {/* 🛰️ Right Sidebar */}
       <InfoSidebar
-        isDarkMode={isDarkMode}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         collapsed={sidebarCollapsed}

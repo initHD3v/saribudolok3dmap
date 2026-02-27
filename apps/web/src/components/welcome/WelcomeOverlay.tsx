@@ -7,14 +7,16 @@ import Image from 'next/image';
 import saribudolokData from '@/data/saribudolokData';
 
 export default function WelcomeOverlay({ onDismiss }: { onDismiss?: () => void }) {
-    const [visible, setVisible] = useState(false);
+    const [visible, setVisible] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return !sessionStorage.getItem('welcome-seen');
+        }
+        return false;
+    });
     const [imageLoaded, setImageLoaded] = useState(false);
 
     useEffect(() => {
-        const seen = sessionStorage.getItem('welcome-seen');
-        if (!seen) {
-            setVisible(true);
-        }
+        // Hydration check
     }, []);
 
     const handleDismiss = () => {

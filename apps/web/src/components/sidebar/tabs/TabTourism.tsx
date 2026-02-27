@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, ChevronDown, Star } from 'lucide-react';
+import { ChevronDown, Star, Camera, Calendar, Map, CheckCircle2 } from 'lucide-react';
 import Image from 'next/image';
 import saribudolokData from '@/data/saribudolokData';
 

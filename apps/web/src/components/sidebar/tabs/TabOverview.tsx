@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Ruler, Mountain, Users, Thermometer, Info } from 'lucide-react';
+import { Ruler, Mountain, Users, Thermometer, Info } from 'lucide-react';
 import StatCard from '@/components/ui/StatCard';
 import saribudolokData from '@/data/saribudolokData';
 

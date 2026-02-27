@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CloudRain, Thermometer, Droplets, Compass, Mountain, Layers } from 'lucide-react';
+import { CloudRain, Thermometer, Droplets, Mountain, Layers } from 'lucide-react';
 import saribudolokData from '@/data/saribudolokData';
 
 function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Map, BookOpen, Compass, Bot, Github, Mail, ExternalLink, MapPin } from 'lucide-react';
+import { X, Navigation, Map, Globe, Info, Code, Shield, Compass, MapPin, BookOpen } from 'lucide-react';
 import saribudolokData from '@/data/saribudolokData';
 import type { SidebarTabId } from '@/components/sidebar/InfoSidebar';
 
