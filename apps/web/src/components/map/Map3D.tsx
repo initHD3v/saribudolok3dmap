@@ -43,6 +43,8 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
   const [measurementResult, setMeasurementResult] = useState<{ area: number, perimeter: number } | null>(null);
   const [isMeasuring, setIsMeasuring] = useState(false);
   const drawRef = useRef<MapboxDraw | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const timersRef = useRef<NodeJS.Timeout[]>([]);
 
   const maptilerKey = 'eFSf5fcbQmUI97nngDN1';
 
@@ -129,6 +131,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     const safetyTimer = setTimeout(() => {
       if (!mapLoaded) setMapLoaded(true);
     }, 4000);
+    timersRef.current.push(safetyTimer);
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
@@ -305,7 +308,8 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       };
 
       // Delay slightly to ensure base style layers are fully loaded
-      setTimeout(enhanceStreetLabels, 1500);
+      const labelTimer = setTimeout(enhanceStreetLabels, 1500);
+      timersRef.current.push(labelTimer);
 
       setMapLoaded(true);
     });
@@ -318,6 +322,16 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
 
     return () => {
       clearTimeout(safetyTimer);
+      // Clear all tracked timers
+      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current = [];
+
+      // Cancel any active animation loops
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = null;
+      }
+
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -639,13 +653,14 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         // Animation logic kept only for landmarks
         let step = 0;
         const animate = () => {
+          if (!mapRef.current) return;
           step += 0.05;
           const glowRadius = 5 + Math.sin(step) * 2;
 
           if (map.getLayer('landmarks-pulse')) {
             map.setPaintProperty('landmarks-pulse', 'circle-radius', glowRadius);
           }
-          requestAnimationFrame(animate);
+          animFrameRef.current = requestAnimationFrame(animate);
         };
         animate();
 
