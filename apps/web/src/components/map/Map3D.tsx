@@ -236,7 +236,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           const feature = data.features[0];
           if (feature.geometry.type === 'Polygon') {
             const area = turf.area(feature as any);
-            const perimeter = turf.length(feature as any, { units: 'meters' });
+            const perimeter = (turf as any).length(feature as any, { units: 'meters' });
             setMeasurementResult({ area, perimeter });
           }
         } else {
