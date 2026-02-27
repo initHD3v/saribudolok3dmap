@@ -2,7 +2,9 @@
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
-import { Navigation } from 'lucide-react';
+import { Navigation, MapPin, Navigation2, Car, Bike, Footprints } from 'lucide-react';
+import * as turf from '@turf/turf';
+import { length } from '@turf/length';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import saribudolokData from '@/data/saribudolokData';
 
@@ -28,6 +30,12 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  // Routing State
+  const [routePoints, setRoutePoints] = useState<[number, number][]>([]);
+  const [routeAddresses, setRouteAddresses] = useState<string[]>(['', '']);
+  const [routeInfo, setRouteInfo] = useState<{ distance: number, distanceStr: string, durationCar: number, durationBike: number, durationWalk: number } | null>(null);
+  const routePointsRef = useRef<[number, number][]>([]); // Track without re-rendering the whole map init
 
   const maptilerKey = 'eFSf5fcbQmUI97nngDN1';
 
@@ -151,6 +159,28 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         trackUserLocation: true,
       }), 'bottom-right');
 
+      // Enhance Street Names Visibility
+      const enhanceStreetLabels = () => {
+        const layers = map.getStyle().layers;
+        if (!layers) return;
+
+        layers.forEach((layer) => {
+          if (layer.id.includes('road-label') || layer.id.includes('highway-name')) {
+            map.setLayoutProperty(layer.id, 'text-size', [
+              'interpolate', ['linear'], ['zoom'],
+              12, 10,
+              18, 16
+            ]);
+            map.setPaintProperty(layer.id, 'text-color', isDark ? '#ffffff' : '#1e293b');
+            map.setPaintProperty(layer.id, 'text-halo-color', isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)');
+            map.setPaintProperty(layer.id, 'text-halo-width', 2);
+          }
+        });
+      };
+
+      // Delay slightly to ensure base style layers are fully loaded
+      setTimeout(enhanceStreetLabels, 500);
+
       setMapLoaded(true);
     });
 
@@ -168,6 +198,228 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       }
     };
   }, [isDark]);
+
+  // Helper: Reverse Geocoding (Nominatim API)
+  const fetchAddress = async (lng: number, lat: number) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=id`);
+      const data = await res.json();
+      return data.address?.road || data.name || data.display_name?.split(',')[0] || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    } catch {
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+  };
+
+  // Handle Route Calculation and Drawing
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || routePoints.length < 2) return;
+
+    const [start, end] = routePoints;
+
+    const fetchRoute = async () => {
+      try {
+        // Since MapTiler doesn't have a direct free directions API without a separate key format sometimes, 
+        // we use OSRM free public API for proof-of-concept routing.
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${start[0]},${start[1]};${end[0]},${end[1]}?overview=full&geometries=geojson`;
+
+        const response = await fetch(osrmUrl);
+        const data = await response.json();
+
+        if (data.code !== 'Ok') throw new Error('Route not found');
+
+        const route = data.routes[0];
+
+        const distanceVal = route.distance; // in meters
+        const durationVal = Math.max(1, Math.round(route.duration / 60)); // in minutes
+
+        const distanceStr = distanceVal > 1000
+          ? `${(distanceVal / 1000).toFixed(1)} km`
+          : `${Math.round(distanceVal)} m`;
+
+        setRouteInfo({
+          distance: +(distanceVal / 1000).toFixed(2), // km for state
+          distanceStr: distanceStr,
+          durationCar: Math.max(1, Math.round((distanceVal / 1000) / 40 * 60)), // ~40kmh average
+          durationBike: Math.max(1, Math.round((distanceVal / 1000) / 15 * 60)), // ~15kmh average
+          durationWalk: Math.max(1, Math.round((distanceVal / 1000) / 5 * 60)), // ~5kmh average
+        });
+
+        // 1. Line Feature
+        const routeLineFeature = {
+          type: 'Feature',
+          properties: {},
+          geometry: route.geometry
+        };
+
+        // 2. Center Label Feature
+        // Calculate midpoint along the line using turf
+        const line = turf.lineString(route.geometry.coordinates);
+        const routeLength = length(line, { units: 'meters' });
+        const midpoint = turf.along(line, routeLength / 2, 'meters');
+
+        const labelFeature = {
+          type: 'Feature',
+          properties: {
+            label: `${distanceStr}\n(~${durationVal} mnt)`
+          },
+          geometry: midpoint.geometry
+        };
+
+        const featureCollection = {
+          type: 'FeatureCollection',
+          features: [routeLineFeature, labelFeature]
+        };
+
+        if (map.getSource('route')) {
+          (map.getSource('route') as maplibregl.GeoJSONSource).setData(featureCollection as any);
+        } else {
+          map.addSource('route', {
+            type: 'geojson',
+            data: featureCollection as any
+          });
+
+          map.addLayer({
+            id: 'route-line-casing',
+            type: 'line',
+            source: 'route',
+            filter: ['==', '$type', 'LineString'],
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': isDark ? '#1e3a8a' : '#bfdbfe', // Adaptive casing
+              'line-width': 8,
+              'line-opacity': 0.8
+            }
+          });
+
+          map.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route',
+            filter: ['==', '$type', 'LineString'],
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': isDark ? '#3b82f6' : '#2563eb', // Adaptive core
+              'line-width': 4
+            }
+          });
+
+          // Midpoint Label Layer
+          map.addLayer({
+            id: 'route-label',
+            type: 'symbol',
+            source: 'route',
+            filter: ['==', '$type', 'Point'],
+            layout: {
+              'text-field': ['get', 'label'],
+              'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+              'text-size': 13,
+              'text-justify': 'center',
+              'text-anchor': 'center',
+              'symbol-placement': 'point',
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#1e40af', // Dark blue halo
+              'text-halo-width': 2,
+            }
+          });
+        }
+
+        // Fit bounds to show the whole route
+        const bounds = route.geometry.coordinates.reduce((acc: any, coord: any) => {
+          return acc.extend(coord);
+        }, new maplibregl.LngLatBounds(route.geometry.coordinates[0], route.geometry.coordinates[0]));
+
+        map.fitBounds(bounds, { padding: 80, duration: 1500 });
+
+      } catch (err) {
+        console.error("Routing error:", err);
+      }
+    };
+
+    fetchRoute();
+  }, [routePoints]);
+
+  // Click Handler for placing routing pins
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handleMapClick = async (e: maplibregl.MapMouseEvent) => {
+      const { lng, lat } = e.lngLat;
+      const newPoints = [...routePointsRef.current];
+
+      if (newPoints.length >= 2) {
+        // Reset if we already have 2 points
+        newPoints.length = 0;
+        setRouteInfo(null);
+        setRouteAddresses(['', '']);
+        if (map.getSource('route')) {
+          (map.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+        }
+      }
+
+      newPoints.push([lng, lat]);
+      routePointsRef.current = newPoints;
+      setRoutePoints([...newPoints]);
+
+      // Fetch Address
+      const address = await fetchAddress(lng, lat);
+      setRouteAddresses(prev => {
+        const newAddrs = [...prev];
+        if (newPoints.length === 1) {
+          newAddrs[0] = address;
+        } else if (newPoints.length === 2) {
+          newAddrs[1] = address;
+        }
+        return newAddrs;
+      });
+
+      // Add markers visually
+      const markerId = `route-marker-${newPoints.length}`;
+      if (map.getSource(markerId)) {
+        (map.getSource(markerId) as maplibregl.GeoJSONSource).setData({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lng, lat] },
+          properties: {}
+        } as any);
+      } else {
+        map.addSource(markerId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [lng, lat] },
+            properties: {}
+          } as any
+        });
+        map.addLayer({
+          id: markerId,
+          type: 'circle',
+          source: markerId,
+          paint: {
+            'circle-radius': 8,
+            'circle-color': newPoints.length === 1 ? '#22c55e' : '#ef4444', // Green for start, Red for end
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#ffffff'
+          }
+        });
+      }
+    };
+
+    map.on('click', handleMapClick);
+
+    return () => {
+      map.off('click', handleMapClick);
+    };
+  }, [mapLoaded]); // Depend on mapLoaded so it attaches after init
+
 
   // Auto-Geolocation Camera logic (Handled via Ref now)
 
@@ -409,13 +661,102 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Loading Overlay */}
-      <div className={`absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-2xl transition-all duration-1000 ${mapLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-2xl transition-all duration-1000 pointer-events-none ${mapLoaded ? 'opacity-0' : 'opacity-100'}`}>
         <div className="relative">
           <div className="w-24 h-24 border-4 border-blue-500/20 rounded-full animate-spin border-t-blue-500" />
           <Navigation className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-blue-500 animate-pulse" />
         </div>
         <div className="mt-8 text-blue-500 font-black tracking-[0.5em] uppercase text-[10px] animate-pulse">
           Isolating Geographic Sector...
+        </div>
+      </div>
+
+      {/* Routing UI Overlay - Moved to Left */}
+      <div className={`absolute top-24 left-4 z-40 max-w-sm w-full transition-all duration-500 transform ${routePoints.length > 0 ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0 pointer-events-none'}`}>
+        <div className={`backdrop-blur-xl border p-5 rounded-2xl shadow-2xl transition-colors duration-300 ${isDark ? 'bg-slate-900/80 border-slate-700/50 shadow-blue-900/10' : 'bg-white/90 border-slate-200/60 shadow-slate-200/50'}`}>
+          <h3 className={`font-semibold text-sm mb-4 flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-800'}`}>
+            <div className={`p-1.5 rounded-lg ${isDark ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
+              <Navigation2 className="w-4 h-4 text-blue-500" />
+            </div>
+            Navigasi Jarak & Rute
+          </h3>
+
+          <div className="space-y-4 relative">
+            <div className={`absolute left-[15px] top-5 bottom-5 w-0.5 ${isDark ? 'bg-slate-700/50' : 'bg-slate-200'}`} />
+
+            <div className="flex items-start gap-4 relative z-10">
+              <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center ${isDark ? 'bg-slate-800 border-green-500/50' : 'bg-white border-green-400'}`}>
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className={`text-[10px] uppercase font-bold tracking-wider block mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Lokasi Awal (A)</span>
+                <span className={`font-medium truncate block ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                  {routePoints[0] ? (routeAddresses[0] || 'Mengambil lokasi...') : 'Pilih titik di peta...'}
+                </span>
+                {routePoints[0] && <span className={`text-[10px] block mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{routePoints[0][1].toFixed(5)}, {routePoints[0][0].toFixed(5)}</span>}
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 relative z-10">
+              <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center ${isDark ? 'bg-slate-800 border-red-500/50' : 'bg-white border-red-400'}`}>
+                <MapPin className="w-4 h-4 text-red-500" fill="currentColor" fillOpacity={0.2} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className={`text-[10px] uppercase font-bold tracking-wider block mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Tujuan (B)</span>
+                <span className={`font-medium truncate block ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                  {routePoints[1] ? (routeAddresses[1] || 'Mengambil lokasi...') : 'Pilih titik di peta...'}
+                </span>
+                {routePoints[1] && <span className={`text-[10px] block mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{routePoints[1][1].toFixed(5)}, {routePoints[1][0].toFixed(5)}</span>}
+              </div>
+            </div>
+          </div>
+
+          {routeInfo && (
+            <div className={`mt-5 pt-4 border-t ${isDark ? 'border-slate-700/50' : 'border-slate-200'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <span className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Total Jarak:</span>
+                <span className="text-blue-500 font-bold text-xl">{routeInfo.distanceStr}</span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className={`p-2 rounded-lg flex flex-col items-center justify-center text-center ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                  <Car className={`w-4 h-4 mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <span className="text-[10px] font-bold text-emerald-500">{routeInfo.durationCar} mnt</span>
+                </div>
+                <div className={`p-2 rounded-lg flex flex-col items-center justify-center text-center ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                  <Bike className={`w-4 h-4 mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <span className="text-[10px] font-bold text-emerald-500">{routeInfo.durationBike} mnt</span>
+                </div>
+                <div className={`p-2 rounded-lg flex flex-col items-center justify-center text-center ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                  <Footprints className={`w-4 h-4 mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                  <span className="text-[10px] font-bold text-emerald-500">{routeInfo.durationWalk} mnt</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {routePoints.length > 0 && (
+            <button
+              onClick={() => {
+                setRoutePoints([]);
+                routePointsRef.current = [];
+                setRouteInfo(null);
+                setRouteAddresses(['', '']);
+                const map = mapRef.current;
+                if (map) {
+                  if (map.getSource('route')) (map.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+                  if (map.getSource('route-marker-1')) (map.getSource('route-marker-1') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+                  if (map.getSource('route-marker-2')) (map.getSource('route-marker-2') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+                }
+              }}
+              className={`mt-4 w-full py-2.5 text-sm font-semibold rounded-lg transition-colors ${isDark
+                  ? 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                }`}
+            >
+              Tutup / Reset
+            </button>
+          )}
         </div>
       </div>
     </div>
