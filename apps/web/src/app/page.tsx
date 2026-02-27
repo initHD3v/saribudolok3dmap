@@ -2,7 +2,7 @@
 
 import React, { useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Search, Layers, Navigation, Menu, Sun, Moon } from 'lucide-react';
+import { Search, Layers, Navigation, Menu, Sun, Moon, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Map3DHandle } from '@/components/map/Map3D';
 import type { SidebarTabId } from '@/components/sidebar/InfoSidebar';
@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   { label: 'Explore', tab: 'overview' as SidebarTabId },
   { label: 'Discover', tab: 'tourism' as SidebarTabId },
   { label: 'Learn', tab: 'geography' as SidebarTabId },
-  { label: 'Measure', tab: null as SidebarTabId | null },
   { label: 'AI', tab: null as SidebarTabId | null },  // AI panel (placeholder)
 ] as const;
 
@@ -35,7 +34,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [searchFeedback, setSearchFeedback] = React.useState('');
   const [activeNav, setActiveNav] = React.useState('Explore');
-  const [isMeasuring, setIsMeasuring] = React.useState(false);
+  const [activeTool, setActiveTool] = React.useState<'measure' | 'route' | null>(null);
   const mapRef = useRef<Map3DHandle>(null);
 
   React.useEffect(() => {
@@ -61,21 +60,10 @@ export default function Home() {
   }, []);
 
   const handleNavClick = useCallback((label: string, tab: SidebarTabId | null) => {
-    if (label === 'Measure') {
-      const newState = mapRef.current?.toggleMeasurementMode() || false;
-      setIsMeasuring(newState);
-      if (newState) {
-        setActiveNav('Measure');
-      } else {
-        setActiveNav('Explore');
-      }
-      return;
-    }
-
-    // If switching away from Measure, ensure measurement mode is off
-    if (isMeasuring) {
-      mapRef.current?.toggleMeasurementMode();
-      setIsMeasuring(false);
+    // If switching away to a main tab, deactivate tools
+    if (activeTool) {
+      mapRef.current?.setToolMode(null);
+      setActiveTool(null);
     }
 
     setActiveNav(label);
@@ -88,7 +76,19 @@ export default function Home() {
       setSearchFeedback('🤖 AI Spatial Intelligence segera hadir!');
       setTimeout(() => setSearchFeedback(''), 3000);
     }
-  }, [isMeasuring]);
+  }, [activeTool]);
+
+  const handleToolSelect = useCallback((mode: 'measure' | 'route') => {
+    if (activeTool === mode) {
+      // toggle off
+      mapRef.current?.setToolMode(null);
+      setActiveTool(null);
+    } else {
+      mapRef.current?.setToolMode(mode);
+      setActiveTool(mode);
+      setActiveNav('Tools');
+    }
+  }, [activeTool]);
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +140,19 @@ export default function Home() {
       <MenuDrawer isOpen={menuOpen} onClose={() => setMenuOpen(false)} onNavigate={handleMenuNavigate} />
 
       {/* 🌍 Background: 3D Geo Map */}
-      <Map3D ref={mapRef} center={[98.6104, 2.9387]} zoom={14} isDark={isDarkMode} is3D={is3D} />
+      <Map3D
+        ref={mapRef}
+        center={[98.6104, 2.9387]}
+        zoom={14}
+        isDark={isDarkMode}
+        is3D={is3D}
+        onToolChange={(tool) => {
+          setActiveTool(tool);
+          if (tool === null && activeNav === 'Tools') {
+            setActiveNav('Explore');
+          }
+        }}
+      />
 
       {/* 🛸 Header Navigation */}
       <header className="absolute top-0 left-0 right-0 z-50 p-6 flex justify-between items-center pointer-events-none">
@@ -178,7 +190,7 @@ export default function Home() {
                 onClick={() => handleNavClick(item.label, item.tab)}
                 className={`
                   relative px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all
-                  ${(activeNav === item.label) || (item.label === 'Measure' && isMeasuring)
+                  ${activeNav === item.label
                     ? 'text-white bg-blue-600 shadow-lg shadow-blue-600/30'
                     : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'
                   }
@@ -187,6 +199,40 @@ export default function Home() {
                 {item.label}
               </button>
             ))}
+
+            {/* Tools Dropdown */}
+            <div className="relative group">
+              <button
+                className={`
+                  relative flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all
+                  ${activeNav === 'Tools' || activeTool
+                    ? 'text-white bg-blue-600 shadow-lg shadow-blue-600/30'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'
+                  }
+                `}
+              >
+                Tools
+                <ChevronDown size={14} className={`transition-transform duration-300 group-hover:rotate-180 ${activeNav === 'Tools' || activeTool ? 'text-white' : ''}`} />
+              </button>
+
+              {/* Dropdown Menu */}
+              <div className={`absolute top-full right-0 mt-3 w-56 rounded-xl shadow-[0_20px_40px_-15px_rgba(0,0,0,0.3)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 origin-top-right transform scale-95 group-hover:scale-100 border ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <div className="p-1">
+                  <button
+                    onClick={() => handleToolSelect('route')}
+                    className={`w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2 ${activeTool === 'route' ? 'bg-blue-500/10 text-blue-500' : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100')}`}
+                  >
+                    Navigasi Jarak & Rute
+                  </button>
+                  <button
+                    onClick={() => handleToolSelect('measure')}
+                    className={`w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-2 mt-1 ${activeTool === 'measure' ? 'bg-blue-500/10 text-blue-500' : (isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100')}`}
+                  >
+                    Pengukuran Lahan
+                  </button>
+                </div>
+              </div>
+            </div>
           </motion.nav>
 
           <motion.button

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
-import { Navigation, MapPin, Navigation2, Car, Bike, Footprints, Ruler, Trash2, X } from 'lucide-react';
+import { Navigation, MapPin, Navigation2, Car, Bike, Footprints, Ruler, Trash2, X, Download } from 'lucide-react';
 import * as turf from '@turf/turf';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
@@ -14,13 +14,14 @@ interface Map3DProps {
   zoom?: number;
   isDark?: boolean;
   is3D?: boolean;
+  onToolChange?: (tool: 'measure' | 'route' | null) => void;
 }
 
 export interface Map3DHandle {
   flyToCenter: () => void;
   setPitch: (pitch: number) => void;
   triggerGeolocation: () => void;
-  toggleMeasurementMode: () => boolean; // Returns new state
+  setToolMode: (mode: 'measure' | 'route' | null) => void;
 }
 
 const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
@@ -28,16 +29,21 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
   zoom = 14,
   isDark = true,
   is3D = true,
+  onToolChange,
 }, ref) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const isDarkRef = useRef(isDark); // Track isDark without triggering map re-init
+  const isInitialMount = useRef(true); // Track initial React mount
 
   // Routing State
   const [routePoints, setRoutePoints] = useState<[number, number][]>([]);
   const [routeAddresses, setRouteAddresses] = useState<string[]>(['', '']);
   const [routeInfo, setRouteInfo] = useState<{ distance: number, distanceStr: string, durationCar: number, durationBike: number, durationWalk: number } | null>(null);
   const routePointsRef = useRef<[number, number][]>([]); // Track without re-rendering the whole map init
+  const [isRouting, setIsRouting] = useState(false);
+  const isRoutingRef = useRef(false);
 
   // Measurement State
   const [measurementResult, setMeasurementResult] = useState<{ area: number, perimeter: number } | null>(null);
@@ -89,10 +95,17 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         );
       }
     },
-    toggleMeasurementMode: () => {
-      const nextIsMeasuring = !isMeasuring;
-      if (nextIsMeasuring) {
-        // Clear Existing Routes for mutual exclusivity
+    setToolMode: (mode: 'measure' | 'route' | null) => {
+      // Deactivate Measure if it's not the requested mode
+      if (mode !== 'measure' && isMeasuring) {
+        drawRef.current?.changeMode('simple_select');
+        drawRef.current?.deleteAll();
+        setMeasurementResult(null);
+        setIsMeasuring(false);
+      }
+
+      // Deactivate Routing if it's not the requested mode
+      if (mode !== 'route' && isRoutingRef.current) {
         setRoutePoints([]);
         routePointsRef.current = [];
         setRouteInfo(null);
@@ -102,28 +115,38 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           if (map.getSource('route')) {
             (map.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
           }
-          // Remove markers
           for (let i = 1; i <= 2; i++) {
             const markerId = `route-marker-${i}`;
             if (map.getLayer(markerId)) map.removeLayer(markerId);
             if (map.getSource(markerId)) map.removeSource(markerId);
           }
         }
-        drawRef.current?.changeMode('draw_polygon');
-      } else {
-        drawRef.current?.changeMode('simple_select');
-        drawRef.current?.deleteAll();
-        setMeasurementResult(null);
+        setIsRouting(false);
+        isRoutingRef.current = false;
       }
-      setIsMeasuring(nextIsMeasuring);
-      return nextIsMeasuring;
+
+      // Activate Measure
+      if (mode === 'measure') {
+        drawRef.current?.changeMode('draw_polygon');
+        setIsMeasuring(true);
+      }
+      // Activate Routing
+      else if (mode === 'route') {
+        setIsRouting(true);
+        isRoutingRef.current = true;
+      }
+
+      // Notify parent
+      if (onToolChange) {
+        onToolChange(mode);
+      }
     }
   }));
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    const styleUrl = isDark
+    const styleUrl = isDarkRef.current
       ? `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${maptilerKey}`
       : `https://api.maptiler.com/maps/streets-v2/style.json?key=${maptilerKey}`;
 
@@ -156,49 +179,6 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       console.log('✅ Map engine ready');
       setMapLoaded(true);
       map.resize();
-
-      // Setup Terrain
-      map.addSource('terrain', {
-        type: 'raster-dem',
-        url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${maptilerKey}`,
-        tileSize: 512,
-      });
-      map.setTerrain({ source: 'terrain', exaggeration: 1.2 });
-
-      setupSaribudolokLayers(map);
-
-
-      // V3: Topographic Contours (High-Altitude emphasis)
-      map.addSource('contours', {
-        type: 'vector',
-        url: `https://api.maptiler.com/tiles/contours/tiles.json?key=${maptilerKey}`
-      });
-      map.addLayer({
-        id: 'contour-lines',
-        type: 'line',
-        source: 'contours',
-        'source-layer': 'contour',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': isDark ? '#ffffff' : '#000000',
-          'line-opacity': 0.08,
-          'line-width': 0.5
-        }
-      });
-
-      // Map Controls
-      map.addControl(new maplibregl.NavigationControl(), 'top-right');
-      map.addControl(new maplibregl.GeolocateControl({
-        positionOptions: {
-          enableHighAccuracy: true
-        },
-        trackUserLocation: true,
-      }), 'bottom-right');
-
-      // Initialize Draw Control
       const draw = new MapboxDraw({
         displayControlsDefault: false,
         controls: {
@@ -211,7 +191,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           {
             'id': 'gl-draw-polygon-fill-active',
             'type': 'fill',
-            'filter': ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+            'filter': ['==', '$type', 'Polygon'],
             'paint': {
               'fill-color': '#3b82f6',
               'fill-outline-color': '#3b82f6',
@@ -221,7 +201,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           {
             'id': 'gl-draw-polygon-stroke-active',
             'type': 'line',
-            'filter': ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+            'filter': ['==', '$type', 'Polygon'],
             'layout': {
               'line-cap': 'round',
               'line-join': 'round'
@@ -236,7 +216,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           {
             'id': 'gl-draw-polygon-and-line-vertex-active',
             'type': 'circle',
-            'filter': ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point'], ['!=', 'mode', 'static']],
+            'filter': ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point']],  // Keep 'all' here since multiple conditions
             'paint': {
               'circle-radius': 5,
               'circle-color': '#ffffff',
@@ -246,10 +226,6 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         ]
       });
-
-      // MapLibre Compatibility Shim for MapboxDraw
-      // Fixes: TypeError: undefined is not an object (evaluating 'this.style.getLayer')
-      (map as any).style.getLayer = (id: string) => map.getLayer(id);
 
       map.addControl(draw as any, 'top-right');
       drawRef.current = draw;
@@ -272,9 +248,68 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
       map.on('draw.delete', updateMeasurement);
       map.on('draw.update', updateMeasurement);
 
+      // Force initial setup once fully loaded
+      setupAllLayers(map);
+    });
+
+    // Helper: Setup all custom layers (called on initial load AND after style swap)
+    const setupAllLayers = (mapInstance: maplibregl.Map) => {
+      // Setup Terrain
+      if (!mapInstance.getSource('terrain')) {
+        mapInstance.addSource('terrain', {
+          type: 'raster-dem',
+          url: `https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=${maptilerKey}`,
+          tileSize: 512,
+        });
+      }
+      mapInstance.setTerrain({ source: 'terrain', exaggeration: 1.2 });
+
+      setupSaribudolokLayers(mapInstance);
+
+
+      // V3: Topographic Contours (High-Altitude emphasis)
+      if (!mapInstance.getSource('contours')) {
+        mapInstance.addSource('contours', {
+          type: 'vector',
+          url: `https://api.maptiler.com/tiles/contours/tiles.json?key=${maptilerKey}`
+        });
+      }
+      if (!mapInstance.getLayer('contour-lines')) {
+        mapInstance.addLayer({
+          id: 'contour-lines',
+          type: 'line',
+          source: 'contours',
+          'source-layer': 'contour',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': isDarkRef.current ? '#ffffff' : '#000000',
+            'line-opacity': 0.08,
+            'line-width': 0.5
+          }
+        });
+      }
+
+      // Map Controls (only add once)
+      if (!(mapInstance as any)._controlsAdded) {
+        mapInstance.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'top-left');
+        mapInstance.addControl(new maplibregl.GeolocateControl({
+          positionOptions: {
+            enableHighAccuracy: true
+          },
+          trackUserLocation: true,
+        }), 'top-left');
+        (mapInstance as any)._controlsAdded = true;
+      }
+
+
+
       // Enhance Street Names Visibility and Show Minor Roads
       const enhanceStreetLabels = () => {
-        const layers = map.getStyle().layers;
+        if (!mapInstance.getStyle()) return;
+        const layers = mapInstance.getStyle().layers;
         if (!layers) return;
 
         layers.forEach((layer) => {
@@ -284,40 +319,55 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
             if (layer.type === 'symbol') {
               // Force minor roads to appear earlier by lowering the minzoom if it exists
               if (layer.minzoom && layer.minzoom > 14) {
-                map.setLayerZoomRange(layer.id, 13, 24);
+                mapInstance.setLayerZoomRange(layer.id, 12, 22);
               }
 
               try {
-                map.setLayoutProperty(layer.id, 'text-size', [
+                mapInstance.setLayoutProperty(layer.id, 'text-size', [
                   'interpolate', ['linear'], ['zoom'],
                   13, 10,
                   18, 16
                 ]);
                 // Force visibility of labels that might be hidden by default
-                map.setLayoutProperty(layer.id, 'visibility', 'visible');
+                mapInstance.setLayoutProperty(layer.id, 'visibility', 'visible');
 
-                map.setPaintProperty(layer.id, 'text-color', isDark ? '#ffffff' : '#1e293b');
-                map.setPaintProperty(layer.id, 'text-halo-color', isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)');
-                map.setPaintProperty(layer.id, 'text-halo-width', 2);
+                mapInstance.setPaintProperty(layer.id, 'text-color', isDarkRef.current ? '#ffffff' : '#1e293b');
+                mapInstance.setPaintProperty(layer.id, 'text-halo-color', isDarkRef.current ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)');
+                mapInstance.setPaintProperty(layer.id, 'text-halo-width', 2);
               } catch (e) {
-                // Some layers might not support these specific properties, safely ignore
+                // Safely ignore
               }
             }
           }
         });
       };
 
-      // Delay slightly to ensure base style layers are fully loaded
-      const labelTimer = setTimeout(enhanceStreetLabels, 1500);
+      // Delay slightly and use requestIdleCallback if available for performance
+      const labelTimer = setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).requestIdleCallback) {
+          (window as any).requestIdleCallback(() => enhanceStreetLabels());
+        } else {
+          enhanceStreetLabels();
+        }
+      }, 2000);
       timersRef.current.push(labelTimer);
 
       setMapLoaded(true);
+    }; // end setupAllLayers
+
+    // Re-apply layers after style swap (theme change)
+    map.on('style.load', () => {
+      console.log('🎨 Style loaded/swapped, re-applying layers...');
+      setupAllLayers(map);
     });
 
 
     map.on('error', (e) => {
-      console.error('❌ Map engine error:', e);
-      setMapLoaded(true);
+      // Only log the actual error message, not the entire event object
+      if (e?.error?.message) {
+        console.warn('⚠️ Map engine warning:', e.error.message);
+      }
+      // Do NOT call setMapLoaded here — prevents re-render spam
     });
 
     return () => {
@@ -337,6 +387,35 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         mapRef.current = null;
       }
     };
+  }, []); // Mount only — map is created once, theme changes use setStyle()
+
+  // Bug 2 Fix: Theme change via setStyle() instead of destroy/recreate
+  useEffect(() => {
+    isDarkRef.current = isDark; // Always keep ref in sync
+
+    // Skip the first render because the initial style is already provided to the Map constructor
+    // This prevents a MapLibre "Cannot read properties of undefined (reading 'shaderPreludeCode')" bug 
+    // when setStyle is called concurrently with the map's initial style load.
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    const newStyleUrl = isDark
+      ? `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${maptilerKey}`
+      : `https://api.maptiler.com/maps/streets-v2/style.json?key=${maptilerKey}`;
+
+    // Workaround for MapLibre bug: "Cannot read properties of undefined (reading 'shaderPreludeCode')"
+    // Disable terrain before hot-swapping style. It gets re-enabled by 'style.load' event
+    if (map.getTerrain()) {
+      map.setTerrain(null as any); // Disable terrain safely
+    }
+
+    // setStyle hot-swaps the style; 'style.load' event will re-apply our custom layers
+    map.setStyle(newStyleUrl);
   }, [isDark]);
 
   // Helper: Reverse Geocoding (Nominatim API)
@@ -429,7 +508,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
               'line-cap': 'round'
             },
             paint: {
-              'line-color': isDark ? '#1e3a8a' : '#bfdbfe', // Adaptive casing
+              'line-color': isDarkRef.current ? '#1e3a8a' : '#bfdbfe', // Adaptive casing
               'line-width': 8,
               'line-opacity': 0.8
             }
@@ -445,7 +524,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
               'line-cap': 'round'
             },
             paint: {
-              'line-color': isDark ? '#3b82f6' : '#2563eb', // Adaptive core
+              'line-color': isDarkRef.current ? '#3b82f6' : '#2563eb', // Adaptive core
               'line-width': 4
             }
           });
@@ -493,15 +572,9 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     if (!map) return;
 
     const handleMapClick = async (e: maplibregl.MapMouseEvent) => {
-      // Mutual Exclusivity: If we are measuring, don't start routing on map click
-      // but let the user proceed with measurement. 
-      // Actually, if they click for routing while measuring is true, we should probably deactivate measurement.
-      if (isMeasuring) {
-        drawRef.current?.changeMode('simple_select');
-        drawRef.current?.deleteAll();
-        setMeasurementResult(null);
-        setIsMeasuring(false);
-        return; // Don't place a marker on the same click
+      // Only execute routing click logic if routing tool is explicitly active
+      if (!isRoutingRef.current) {
+        return;
       }
 
       const { lng, lat } = e.lngLat;
@@ -615,223 +688,329 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     };
 
     loadGeoData().then(data => {
-      let heroPoly = null;
+      // Guard: don't add layers if style was completely destroyed
+      if (!map.getStyle()) return;
 
-      if (data && data.features && data.features.length > 0) {
-        const originalFeature = data.features[0];
-        const originalCenter = [98.6087771, 2.9956262]; // From saribudolok.geojson props
-        const targetCenter = [98.6104, 2.9387]; // RS. GKPS Bethesda
+      try {
+        let heroPoly = null;
 
-        const offsetLng = targetCenter[0] - originalCenter[0];
-        const offsetLat = targetCenter[1] - originalCenter[1];
+        if (data && data.features && data.features.length > 0) {
+          const originalFeature = data.features[0];
+          const originalCenter = [98.6087771, 2.9956262]; // From saribudolok.geojson props
+          const targetCenter = [98.6104, 2.9387]; // RS. GKPS Bethesda
 
-        heroPoly = {
-          ...originalFeature,
-          geometry: shiftGeometry(originalFeature.geometry, offsetLng, offsetLat)
-        };
-      } else {
-        // Fallback to circular if GeoJSON loading fails entirely
-        heroPoly = {
-          type: 'Feature',
-          properties: { name: 'Saribudolok Fallback' },
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[
-              [98.6088, 2.9956], [98.6120, 2.9956], [98.6120, 2.9980], [98.6088, 2.9980], [98.6088, 2.9956]
-            ]]
+          const offsetLng = targetCenter[0] - originalCenter[0];
+          const offsetLat = targetCenter[1] - originalCenter[1];
+
+          heroPoly = {
+            ...originalFeature,
+            geometry: shiftGeometry(originalFeature.geometry, offsetLng, offsetLat)
+          };
+        } else {
+          // Fallback to circular if GeoJSON loading fails entirely
+          heroPoly = {
+            type: 'Feature',
+            properties: { name: 'Saribudolok Fallback' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[
+                [98.6088, 2.9956], [98.6120, 2.9956], [98.6120, 2.9980], [98.6088, 2.9980], [98.6088, 2.9956]
+              ]]
+            }
+          };
+        }
+
+        const heroData = { type: 'FeatureCollection', features: [heroPoly] };
+
+        if (heroPoly) {
+          const feature = heroPoly as any;
+          // We still load 'data' for potential boundaries but prioritize heroData for the 3D Effect
+          if (!map.getSource('saribudolok')) {
+            map.addSource('saribudolok', { type: 'geojson', data: heroData as any });
           }
-        };
-      }
 
-      const heroData = { type: 'FeatureCollection', features: [heroPoly] };
+          // Animation logic kept only for landmarks
+          let step = 0;
+          const animate = () => {
+            if (!mapRef.current) return;
+            step += 0.05;
+            const glowRadius = 5 + Math.sin(step) * 2;
 
-      if (heroPoly) {
-        const feature = heroPoly as any;
-        // We still load 'data' for potential boundaries but prioritize heroData for the 3D Effect
-        map.addSource('saribudolok', { type: 'geojson', data: heroData as any });
+            if (map.getLayer('landmarks-pulse')) {
+              map.setPaintProperty('landmarks-pulse', 'circle-radius', glowRadius);
+            }
+            animFrameRef.current = requestAnimationFrame(animate);
+          };
+          animate();
 
-        // Animation logic kept only for landmarks
-        let step = 0;
-        const animate = () => {
-          if (!mapRef.current) return;
-          step += 0.05;
-          const glowRadius = 5 + Math.sin(step) * 2;
+          // Calculate Boundary Info Points (North, South, East, West)
+          const coords = feature.geometry.coordinates[0];
+          let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+          coords.forEach(([lng, lat]: [number, number]) => {
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+          });
 
-          if (map.getLayer('landmarks-pulse')) {
-            map.setPaintProperty('landmarks-pulse', 'circle-radius', glowRadius);
-          }
-          animFrameRef.current = requestAnimationFrame(animate);
-        };
-        animate();
-
-        // Calculate Boundary Info Points (North, South, East, West)
-        const coords = feature.geometry.coordinates[0];
-        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-        coords.forEach(([lng, lat]: [number, number]) => {
-          if (lat < minLat) minLat = lat;
-          if (lat > maxLat) maxLat = lat;
-          if (lng < minLng) minLng = lng;
-          if (lng > maxLng) maxLng = lng;
-        });
-
-        const boundaryInfoData = {
-          type: 'FeatureCollection',
-          features: [
-            { type: 'Feature', geometry: { type: 'Point', coordinates: [(minLng + maxLng) / 2, maxLat] }, properties: { label: `Batas Utara: ${saribudolokData.boundaries.utara}` } },
-            { type: 'Feature', geometry: { type: 'Point', coordinates: [(minLng + maxLng) / 2, minLat] }, properties: { label: `Batas Selatan: ${saribudolokData.boundaries.selatan}` } },
-            { type: 'Feature', geometry: { type: 'Point', coordinates: [maxLng, (minLat + maxLat) / 2] }, properties: { label: `Batas Timur: ${saribudolokData.boundaries.timur}` } },
-            { type: 'Feature', geometry: { type: 'Point', coordinates: [minLng, (minLat + maxLat) / 2] }, properties: { label: `Batas Barat: ${saribudolokData.boundaries.barat}` } },
-          ]
-        };
-
-        map.addSource('boundary-info', { type: 'geojson', data: boundaryInfoData as any });
-        map.addLayer({
-          id: 'boundary-info-labels',
-          type: 'symbol',
-          source: 'boundary-info',
-          layout: {
-            'text-field': ['get', 'label'],
-            'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-            'text-size': 11,
-            'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
-            'text-radial-offset': 1.5,
-            'text-justify': 'auto',
-          },
-          paint: {
-            'text-color': '#60a5fa',
-            'text-halo-color': 'rgba(0,0,0,0.8)',
-            'text-halo-width': 2
-          }
-        });
-
-        // V3 Refinement: Outline Only (Floating Neon Line)
-        map.addLayer({
-          id: 'saribudolok-outline',
-          type: 'line',
-          source: 'saribudolok',
-          paint: {
-            'line-color': '#60a5fa',
-            'line-width': 3,
-            'line-opacity': 0.8,
-            'line-blur': 1,
-          }
-        });
-
-        // Note: saribudolok-body removed to prevent solid blue block
-
-        // V3: Geometric Mesh Grid Layer
-        map.addLayer({
-          id: 'saribudolok-mesh',
-          type: 'line',
-          source: 'saribudolok',
-          paint: {
-            'line-color': isDark ? '#60a5fa' : '#2563eb',
-            'line-width': 1,
-            'line-opacity': 0.3,
-            'line-dasharray': [2, 1],
-          }
-        });
-
-
-        // V3: 3D Pulse Markers for Landmarks
-        const landmarkSource: any = {
-          type: 'geojson',
-          data: {
+          const boundaryInfoData = {
             type: 'FeatureCollection',
             features: [
-              { type: 'Feature', properties: { name: 'Paropo' }, geometry: { type: 'Point', coordinates: [98.5430, 2.9230] } },
-              { type: 'Feature', properties: { name: 'Aek Nauli' }, geometry: { type: 'Point', coordinates: [98.5800, 2.9500] } },
-              { type: 'Feature', properties: { name: 'Simalem' }, geometry: { type: 'Point', coordinates: [98.5140, 2.9770] } },
+              { type: 'Feature', geometry: { type: 'Point', coordinates: [(minLng + maxLng) / 2, maxLat] }, properties: { label: `Batas Utara: ${saribudolokData.boundaries.utara}` } },
+              { type: 'Feature', geometry: { type: 'Point', coordinates: [(minLng + maxLng) / 2, minLat] }, properties: { label: `Batas Selatan: ${saribudolokData.boundaries.selatan}` } },
+              { type: 'Feature', geometry: { type: 'Point', coordinates: [maxLng, (minLat + maxLat) / 2] }, properties: { label: `Batas Timur: ${saribudolokData.boundaries.timur}` } },
+              { type: 'Feature', geometry: { type: 'Point', coordinates: [minLng, (minLat + maxLat) / 2] }, properties: { label: `Batas Barat: ${saribudolokData.boundaries.barat}` } },
             ]
+          };
+
+          if (!map.getSource('boundary-info')) {
+            map.addSource('boundary-info', { type: 'geojson', data: boundaryInfoData as any });
           }
-        };
-        map.addSource('landmarks', landmarkSource);
-
-        map.addLayer({
-          id: 'landmarks-pillars',
-          type: 'fill-extrusion',
-          source: 'landmarks',
-          paint: {
-            'fill-extrusion-color': '#60a5fa',
-            'fill-extrusion-height': 150,
-            'fill-extrusion-base': 0,
-            'fill-extrusion-opacity': 0.8,
+          if (!map.getLayer('boundary-info-labels')) {
+            map.addLayer({
+              id: 'boundary-info-labels',
+              type: 'symbol',
+              source: 'boundary-info',
+              layout: {
+                'text-field': ['get', 'label'],
+                'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                'text-size': 11,
+                'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+                'text-radial-offset': 1.5,
+                'text-justify': 'auto',
+              },
+              paint: {
+                'text-color': '#60a5fa',
+                'text-halo-color': 'rgba(0,0,0,0.8)',
+                'text-halo-width': 2
+              }
+            });
           }
-        });
 
-        map.addLayer({
-          id: 'landmarks-glow',
-          type: 'circle',
-          source: 'landmarks',
-          paint: {
-            'circle-radius': 12,
-            'circle-color': '#3b82f6',
-            'circle-opacity': 0.4,
-            'circle-blur': 1,
+          // V3 Refinement: Outline Only (Floating Neon Line)
+          if (!map.getLayer('saribudolok-outline')) {
+            map.addLayer({
+              id: 'saribudolok-outline',
+              type: 'line',
+              source: 'saribudolok',
+              paint: {
+                'line-color': '#60a5fa',
+                'line-width': 3,
+                'line-opacity': 0.8,
+                'line-blur': 1,
+              }
+            });
           }
-        });
 
-        map.addLayer({
-          id: 'landmarks-labels',
-          type: 'symbol',
-          source: 'landmarks',
-          layout: {
-            'text-field': ['get', 'name'],
-            'text-size': 10,
-            'text-offset': [0, 1.5],
-            'text-anchor': 'top',
-          },
-          paint: {
-            'text-color': '#fff',
-            'text-halo-color': '#000',
-            'text-halo-width': 1
+          // Note: saribudolok-body removed to prevent solid blue block
+
+          // V3: Geometric Mesh Grid Layer
+          if (!map.getLayer('saribudolok-mesh')) {
+            map.addLayer({
+              id: 'saribudolok-mesh',
+              type: 'line',
+              source: 'saribudolok',
+              paint: {
+                'line-color': isDarkRef.current ? '#60a5fa' : '#2563eb',
+                'line-width': 1,
+                'line-opacity': 0.3,
+                'line-dasharray': [2, 1],
+              }
+            });
           }
-        });
-
-        // Hover listeners removed to prevent solid block reappearing
 
 
+          // V3: 3D Pulse Markers for Landmarks
+          const landmarkSource: any = {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: [
+                { type: 'Feature', properties: { name: 'Paropo' }, geometry: { type: 'Point', coordinates: [98.5430, 2.9230] } },
+                { type: 'Feature', properties: { name: 'Aek Nauli' }, geometry: { type: 'Point', coordinates: [98.5800, 2.9500] } },
+                { type: 'Feature', properties: { name: 'Simalem' }, geometry: { type: 'Point', coordinates: [98.5140, 2.9770] } },
+              ]
+            }
+          };
+          if (!map.getSource('landmarks')) {
+            map.addSource('landmarks', landmarkSource);
+          }
 
-        const coordinates = feature.geometry.coordinates[0];
-        const bounds = coordinates.reduce((acc: any, coord: any) => {
-          return acc.extend(coord);
-        }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+          if (!map.getLayer('landmarks-pillars')) {
+            map.addLayer({
+              id: 'landmarks-pillars',
+              type: 'fill-extrusion',
+              source: 'landmarks',
+              paint: {
+                'fill-extrusion-color': '#60a5fa',
+                'fill-extrusion-height': 150,
+                'fill-extrusion-base': 0,
+                'fill-extrusion-opacity': 0.8,
+              }
+            });
+          }
 
-        // Automatic fitBounds disabled to prevent overriding auto-GPS flyTo
-        /*
-        map.fitBounds(bounds, {
-          padding: 120,
-          duration: 2500,
-          pitch: 65,
-          bearing: -20,
-        });
-        */
+          if (!map.getLayer('landmarks-glow')) {
+            map.addLayer({
+              id: 'landmarks-glow',
+              type: 'circle',
+              source: 'landmarks',
+              paint: {
+                'circle-radius': 12,
+                'circle-color': '#3b82f6',
+                'circle-opacity': 0.4,
+                'circle-blur': 1,
+              }
+            });
+          }
+
+          if (!map.getLayer('landmarks-labels')) {
+            map.addLayer({
+              id: 'landmarks-labels',
+              type: 'symbol',
+              source: 'landmarks',
+              layout: {
+                'text-field': ['get', 'name'],
+                'text-size': 10,
+                'text-offset': [0, 1.5],
+                'text-anchor': 'top',
+              },
+              paint: {
+                'text-color': '#fff',
+                'text-halo-color': '#000',
+                'text-halo-width': 1
+              }
+            });
+          }
+
+          // Hover listeners removed to prevent solid block reappearing
+
+
+
+          const coordinates = feature.geometry.coordinates[0];
+          const bounds = coordinates.reduce((acc: any, coord: any) => {
+            return acc.extend(coord);
+          }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+
+          // Automatic fitBounds disabled to prevent overriding auto-GPS flyTo
+          /*
+          map.fitBounds(bounds, {
+            padding: 120,
+            duration: 2500,
+            pitch: 65,
+            bearing: -20,
+          });
+          */
+        }
+      } catch (error) {
+        console.warn('⚠️ Map style interrupted during geo data load:', error);
       }
     });
   };
 
+  const handleExportMeasurement = () => {
+    if (!measurementResult || !drawRef.current) return;
+    const data = drawRef.current.getAll();
+    if (data.features.length === 0) return;
+
+    const feature = data.features[0];
+    const coords = (feature.geometry as any).coordinates[0] || [];
+
+    let content = `HASIL PENGUKURAN LAHAN 3D MAP\n`;
+    content += `=============================\n\n`;
+    content += `Lokasi       : Kawasan Saribudolok\n`;
+    content += `Luas Tanah   : ${measurementResult.area.toLocaleString('id-ID', { maximumFractionDigits: 2 })} m² (~${(measurementResult.area / 10000).toFixed(4)} Ha) (~${(measurementResult.area / 400).toFixed(2)} Rantai)\n`;
+    content += `Keliling     : ${measurementResult.perimeter.toFixed(2)} m\n\n`;
+    content += `KOORDINAT BATAS POLYGON (Longitude, Latitude):\n`;
+    coords.forEach((c: any, i: number) => {
+      // The last coordinate is the same as the first one to close the polygon loop
+      if (i === coords.length - 1) {
+        content += `Titik Akhir (Tutup) : ${c[0].toFixed(6)}, ${c[1].toFixed(6)}\n`;
+      } else {
+        content += `Titik Patok ${i + 1}      : ${c[0].toFixed(6)}, ${c[1].toFixed(6)}\n`;
+      }
+    });
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Pengukuran_Lahan_Saribudolok_${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="relative w-full h-screen bg-slate-950 overflow-hidden">
-      <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+      <div ref={mapContainerRef} className="absolute inset-0 w-full h-full mapboxgl-canvas" />
+
+      {/* OVERRIDE MAPLIBRE DEFAULT CONTROL POSITIONING */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .maplibregl-ctrl-top-left {
+          top: 100px !important;
+          left: 20px !important;
+        }
+        .maplibregl-ctrl-group {
+          background-color: ${isDark ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255, 255, 255, 0.9)'} !important;
+          backdrop-filter: blur(8px) !important;
+          border: 1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} !important;
+          border-radius: 12px !important;
+          overflow: hidden !important;
+        }
+        .maplibregl-ctrl-group button {
+          filter: ${isDark ? 'invert(1) hue-rotate(180deg)' : 'none'} !important;
+        }
+      `}} />
+
+      {/* FLOATING ACTIVE TOOL BANNER */}
+      {(isMeasuring || isRouting) && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-md bg-slate-900/90 border border-blue-500/50">
+          <div className="flex items-center gap-2 text-white font-semibold text-sm">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            {isMeasuring ? 'Mode Pengukuran Lahan Aktif' : 'Mode Navigasi Rute Aktif'}
+          </div>
+          <div className="w-px h-5 bg-slate-700 mx-2" />
+          <button
+            onClick={() => {
+              if (onToolChange) onToolChange(null);
+              // We also manually run the internal setToolMode here to ensure cleanup happens
+              // if ref wasn't called directly by parent, though it's safer to just rely on parent
+              setIsMeasuring(false);
+              setIsRouting(false);
+              isRoutingRef.current = false;
+              drawRef.current?.changeMode('simple_select');
+              drawRef.current?.deleteAll();
+              setMeasurementResult(null);
+              setRoutePoints([]);
+              routePointsRef.current = [];
+              setRouteInfo(null);
+              setRouteAddresses(['', '']);
+              const map = mapRef.current;
+              if (map) {
+                if (map.getSource('route')) (map.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+                for (let i = 1; i <= 2; i++) {
+                  if (map.getLayer(`route-marker-${i}`)) map.removeLayer(`route-marker-${i}`);
+                  if (map.getSource(`route-marker-${i}`)) map.removeSource(`route-marker-${i}`);
+                }
+              }
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-xs font-bold text-red-500 transition-colors uppercase tracking-wider"
+          >
+            <X size={14} />
+            Batal
+          </button>
+        </div>
+      )}
 
       {measurementResult && (
-        <div className={`absolute top-44 right-4 w-64 p-4 rounded-2xl border-2 shadow-2xl z-10 transition-all ${isDark ? 'bg-slate-900/90 border-blue-500/50 text-white backdrop-blur-md' : 'bg-white/90 border-blue-500/30 text-slate-900 backdrop-blur-md'
+        <div className={`absolute top-28 left-4 w-64 p-4 rounded-2xl border-2 shadow-2xl z-10 transition-all ${isDark ? 'bg-slate-900/90 border-blue-500/50 text-white backdrop-blur-md' : 'bg-white/90 border-blue-500/30 text-slate-900 backdrop-blur-md'
           }`}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
               Hasil Pengukuran
             </h3>
-            <button
-              onClick={() => {
-                drawRef.current?.deleteAll();
-                setMeasurementResult(null);
-                setIsMeasuring(false);
-              }}
-              className="p-1 hover:bg-slate-500/20 rounded-md transition-colors"
-            >
-              <Trash2 size={16} className="text-red-400" />
-            </button>
           </div>
 
           <div className="space-y-3">
@@ -857,6 +1036,17 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
               </span>
             </div>
           </div>
+
+          <button
+            onClick={handleExportMeasurement}
+            className={`mt-4 w-full py-2.5 px-3 rounded-lg flex items-center justify-center gap-2 font-semibold text-xs transition-colors border ${isDark
+              ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500/50'
+              : 'bg-blue-500 hover:bg-blue-600 text-white border-blue-600/50'
+              }`}
+          >
+            <Download size={14} />
+            Export Data (.txt)
+          </button>
 
           <p className="mt-3 text-[9px] text-slate-500 text-center leading-tight">
             *Hasil ini adalah estimasi digital.<br />Gunakan jasa survei profesional untuk legalitas.
