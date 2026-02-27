@@ -243,6 +243,11 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           }
         ]
       });
+
+      // MapLibre Compatibility Shim for MapboxDraw
+      // Fixes: TypeError: undefined is not an object (evaluating 'this.style.getLayer')
+      (map as any).style.getLayer = (id: string) => map.getLayer(id);
+
       map.addControl(draw as any, 'top-right');
       drawRef.current = draw;
 
