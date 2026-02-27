@@ -20,6 +20,7 @@ export interface Map3DHandle {
   flyToCenter: () => void;
   setPitch: (pitch: number) => void;
   triggerGeolocation: () => void;
+  toggleMeasurementMode: () => boolean; // Returns new state
 }
 
 const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
@@ -85,6 +86,35 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
           { enableHighAccuracy: true }
         );
       }
+    },
+    toggleMeasurementMode: () => {
+      const nextIsMeasuring = !isMeasuring;
+      if (nextIsMeasuring) {
+        // Clear Existing Routes for mutual exclusivity
+        setRoutePoints([]);
+        routePointsRef.current = [];
+        setRouteInfo(null);
+        setRouteAddresses(['', '']);
+        const map = mapRef.current;
+        if (map) {
+          if (map.getSource('route')) {
+            (map.getSource('route') as maplibregl.GeoJSONSource).setData({ type: 'FeatureCollection', features: [] } as any);
+          }
+          // Remove markers
+          for (let i = 1; i <= 2; i++) {
+            const markerId = `route-marker-${i}`;
+            if (map.getLayer(markerId)) map.removeLayer(markerId);
+            if (map.getSource(markerId)) map.removeSource(markerId);
+          }
+        }
+        drawRef.current?.changeMode('draw_polygon');
+      } else {
+        drawRef.current?.changeMode('simple_select');
+        drawRef.current?.deleteAll();
+        setMeasurementResult(null);
+      }
+      setIsMeasuring(nextIsMeasuring);
+      return nextIsMeasuring;
     }
   }));
 
@@ -444,6 +474,17 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     if (!map) return;
 
     const handleMapClick = async (e: maplibregl.MapMouseEvent) => {
+      // Mutual Exclusivity: If we are measuring, don't start routing on map click
+      // but let the user proceed with measurement. 
+      // Actually, if they click for routing while measuring is true, we should probably deactivate measurement.
+      if (isMeasuring) {
+        drawRef.current?.changeMode('simple_select');
+        drawRef.current?.deleteAll();
+        setMeasurementResult(null);
+        setIsMeasuring(false);
+        return; // Don't place a marker on the same click
+      }
+
       const { lng, lat } = e.lngLat;
       const newPoints = [...routePointsRef.current];
 
@@ -509,7 +550,7 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
     return () => {
       map.off('click', handleMapClick);
     };
-  }, [mapLoaded]); // Depend on mapLoaded so it attaches after init
+  }, [mapLoaded, isMeasuring]); // Re-bind when isMeasuring changes to capture it in closure
 
 
   // Auto-Geolocation Camera logic (Handled via Ref now)
@@ -752,31 +793,6 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
   return (
     <div className="relative w-full h-screen bg-slate-950 overflow-hidden">
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
-
-      {/* Measurement Interface (Toolbar & Stats) */}
-      <div className="absolute top-24 right-4 flex flex-col gap-2 z-10">
-        <button
-          onClick={() => {
-            if (isMeasuring) {
-              drawRef.current?.changeMode('simple_select');
-              drawRef.current?.deleteAll();
-              setMeasurementResult(null);
-              setIsMeasuring(false);
-            } else {
-              drawRef.current?.changeMode('draw_polygon');
-              setIsMeasuring(true);
-            }
-          }}
-          className={`p-3 rounded-xl border-2 transition-all shadow-lg flex items-center gap-2 ${isMeasuring
-            ? 'bg-red-500 border-red-600 text-white animate-pulse'
-            : isDark ? 'bg-slate-900/80 border-slate-700 text-slate-200 hover:border-blue-500' : 'bg-white/80 border-slate-200 text-slate-700 hover:border-blue-500'
-            }`}
-          title={isMeasuring ? 'Batalkan Pengukuran' : 'Ukur Luas Tanah'}
-        >
-          {isMeasuring ? <X size={20} /> : <Ruler size={20} />}
-          <span className="text-sm font-semibold">{isMeasuring ? 'Batal' : 'Ukur Luas'}</span>
-        </button>
-      </div>
 
       {measurementResult && (
         <div className={`absolute top-44 right-4 w-64 p-4 rounded-2xl border-2 shadow-2xl z-10 transition-all ${isDark ? 'bg-slate-900/90 border-blue-500/50 text-white backdrop-blur-md' : 'bg-white/90 border-blue-500/30 text-slate-900 backdrop-blur-md'

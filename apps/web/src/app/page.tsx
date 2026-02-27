@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { label: 'Explore', tab: 'overview' as SidebarTabId },
   { label: 'Discover', tab: 'tourism' as SidebarTabId },
   { label: 'Learn', tab: 'geography' as SidebarTabId },
+  { label: 'Measure', tab: null as SidebarTabId | null },
   { label: 'AI', tab: null as SidebarTabId | null },  // AI panel (placeholder)
 ] as const;
 
@@ -34,6 +35,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [searchFeedback, setSearchFeedback] = React.useState('');
   const [activeNav, setActiveNav] = React.useState('Explore');
+  const [isMeasuring, setIsMeasuring] = React.useState(false);
   const mapRef = useRef<Map3DHandle>(null);
 
   React.useEffect(() => {
@@ -59,6 +61,23 @@ export default function Home() {
   }, []);
 
   const handleNavClick = useCallback((label: string, tab: SidebarTabId | null) => {
+    if (label === 'Measure') {
+      const newState = mapRef.current?.toggleMeasurementMode() || false;
+      setIsMeasuring(newState);
+      if (newState) {
+        setActiveNav('Measure');
+      } else {
+        setActiveNav('Explore');
+      }
+      return;
+    }
+
+    // If switching away from Measure, ensure measurement mode is off
+    if (isMeasuring) {
+      mapRef.current?.toggleMeasurementMode();
+      setIsMeasuring(false);
+    }
+
     setActiveNav(label);
     if (tab) {
       setActiveTab(tab);
@@ -69,7 +88,7 @@ export default function Home() {
       setSearchFeedback('🤖 AI Spatial Intelligence segera hadir!');
       setTimeout(() => setSearchFeedback(''), 3000);
     }
-  }, []);
+  }, [isMeasuring]);
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -146,28 +165,41 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Nav Tabs */}
-        <motion.nav
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="hidden md:flex items-center gap-1 glass-panel px-3 py-2 rounded-full pointer-events-auto"
-        >
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => handleNavClick(item.label, item.tab)}
-              className={`
-                relative px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all
-                ${activeNav === item.label
-                  ? 'text-white bg-blue-600 shadow-lg shadow-blue-600/30'
-                  : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'
-                }
-              `}
-            >
-              {item.label}
-            </button>
-          ))}
-        </motion.nav>
+        {/* Nav Tabs & Menu */}
+        <div className="hidden md:flex items-center gap-3 pointer-events-auto">
+          <motion.nav
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="flex items-center gap-1 glass-panel px-3 py-2 rounded-full shadow-lg"
+          >
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => handleNavClick(item.label, item.tab)}
+                className={`
+                  relative px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-all
+                  ${(activeNav === item.label) || (item.label === 'Measure' && isMeasuring)
+                    ? 'text-white bg-blue-600 shadow-lg shadow-blue-600/30'
+                    : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'
+                  }
+                `}
+              >
+                {item.label}
+              </button>
+            ))}
+          </motion.nav>
+
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            onClick={() => setMenuOpen(true)}
+            className="glass-panel p-3 rounded-full text-foreground hover:text-blue-500 transition-colors shadow-lg"
+          >
+            <Menu className="w-5 h-5" />
+          </motion.button>
+        </div>
 
         {/* Right Controls */}
         <div className="flex items-center gap-3 pointer-events-auto">
@@ -188,15 +220,6 @@ export default function Home() {
                 {isDarkMode ? <Sun className="w-5 h-5 text-yellow-400" /> : <Moon className="w-5 h-5 text-blue-600" />}
               </motion.div>
             </AnimatePresence>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setMenuOpen(true)}
-            className="glass-panel p-3 rounded-full text-foreground hover:text-blue-500 transition-colors"
-          >
-            <Menu className="w-5 h-5" />
           </motion.button>
         </div>
       </header>
