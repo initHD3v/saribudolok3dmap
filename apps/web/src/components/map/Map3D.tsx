@@ -2,9 +2,10 @@
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
-import { Navigation, MapPin, Navigation2, Car, Bike, Footprints } from 'lucide-react';
+import { Navigation, MapPin, Navigation2, Car, Bike, Footprints, Ruler, Trash2, X } from 'lucide-react';
 import * as turf from '@turf/turf';
-import { length } from '@turf/length';
+import MapboxDraw from '@mapbox/mapbox-gl-draw';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import saribudolokData from '@/data/saribudolokData';
 
@@ -36,6 +37,11 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
   const [routeAddresses, setRouteAddresses] = useState<string[]>(['', '']);
   const [routeInfo, setRouteInfo] = useState<{ distance: number, distanceStr: string, durationCar: number, durationBike: number, durationWalk: number } | null>(null);
   const routePointsRef = useRef<[number, number][]>([]); // Track without re-rendering the whole map init
+
+  // Measurement State
+  const [measurementResult, setMeasurementResult] = useState<{ area: number, perimeter: number } | null>(null);
+  const [isMeasuring, setIsMeasuring] = useState(false);
+  const drawRef = useRef<MapboxDraw | null>(null);
 
   const maptilerKey = 'eFSf5fcbQmUI97nngDN1';
 
@@ -159,6 +165,75 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         trackUserLocation: true,
       }), 'bottom-right');
 
+      // Initialize Draw Control
+      const draw = new MapboxDraw({
+        displayControlsDefault: false,
+        controls: {
+          polygon: true,
+          trash: true
+        },
+        defaultMode: 'simple_select',
+        styles: [
+          // ACTIVE (being drawn)
+          {
+            'id': 'gl-draw-polygon-fill-active',
+            'type': 'fill',
+            'filter': ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+            'paint': {
+              'fill-color': '#3b82f6',
+              'fill-outline-color': '#3b82f6',
+              'fill-opacity': 0.2
+            }
+          },
+          {
+            'id': 'gl-draw-polygon-stroke-active',
+            'type': 'line',
+            'filter': ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+            'layout': {
+              'line-cap': 'round',
+              'line-join': 'round'
+            },
+            'paint': {
+              'line-color': '#3b82f6',
+              'line-dasharray': [0.2, 2],
+              'line-width': 2
+            }
+          },
+          // VERTEX
+          {
+            'id': 'gl-draw-polygon-and-line-vertex-active',
+            'type': 'circle',
+            'filter': ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point'], ['!=', 'mode', 'static']],
+            'paint': {
+              'circle-radius': 5,
+              'circle-color': '#ffffff',
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#3b82f6'
+            }
+          }
+        ]
+      });
+      map.addControl(draw as any, 'top-right');
+      drawRef.current = draw;
+
+      const updateMeasurement = () => {
+        const data = draw.getAll();
+        if (data.features.length > 0) {
+          const feature = data.features[0];
+          if (feature.geometry.type === 'Polygon') {
+            const area = turf.area(feature as any);
+            const perimeter = turf.length(feature as any, { units: 'meters' });
+            setMeasurementResult({ area, perimeter });
+          }
+        } else {
+          setMeasurementResult(null);
+        }
+      };
+
+      map.on('draw.create', updateMeasurement);
+      map.on('draw.delete', updateMeasurement);
+      map.on('draw.update', updateMeasurement);
+
       // Enhance Street Names Visibility and Show Minor Roads
       const enhanceStreetLabels = () => {
         const layers = map.getStyle().layers;
@@ -271,8 +346,8 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
         // 2. Center Label Feature
         // Calculate midpoint along the line using turf
         const line = turf.lineString(route.geometry.coordinates);
-        const routeLength = length(line, { units: 'meters' });
-        const midpoint = turf.along(line, routeLength / 2, 'meters');
+        const routeLength = turf.length(line, { units: 'meters' });
+        const midpoint = turf.along(line, routeLength / 2, { units: 'meters' });
 
         const labelFeature = {
           type: 'Feature',
@@ -677,6 +752,81 @@ const Map3D = forwardRef<Map3DHandle, Map3DProps>(function Map3D({
   return (
     <div className="relative w-full h-screen bg-slate-950 overflow-hidden">
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+
+      {/* Measurement Interface (Toolbar & Stats) */}
+      <div className="absolute top-24 right-4 flex flex-col gap-2 z-10">
+        <button
+          onClick={() => {
+            if (isMeasuring) {
+              drawRef.current?.changeMode('simple_select');
+              drawRef.current?.deleteAll();
+              setMeasurementResult(null);
+              setIsMeasuring(false);
+            } else {
+              drawRef.current?.changeMode('draw_polygon');
+              setIsMeasuring(true);
+            }
+          }}
+          className={`p-3 rounded-xl border-2 transition-all shadow-lg flex items-center gap-2 ${isMeasuring
+            ? 'bg-red-500 border-red-600 text-white animate-pulse'
+            : isDark ? 'bg-slate-900/80 border-slate-700 text-slate-200 hover:border-blue-500' : 'bg-white/80 border-slate-200 text-slate-700 hover:border-blue-500'
+            }`}
+          title={isMeasuring ? 'Batalkan Pengukuran' : 'Ukur Luas Tanah'}
+        >
+          {isMeasuring ? <X size={20} /> : <Ruler size={20} />}
+          <span className="text-sm font-semibold">{isMeasuring ? 'Batal' : 'Ukur Luas'}</span>
+        </button>
+      </div>
+
+      {measurementResult && (
+        <div className={`absolute top-44 right-4 w-64 p-4 rounded-2xl border-2 shadow-2xl z-10 transition-all ${isDark ? 'bg-slate-900/90 border-blue-500/50 text-white backdrop-blur-md' : 'bg-white/90 border-blue-500/30 text-slate-900 backdrop-blur-md'
+          }`}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+              Hasil Pengukuran
+            </h3>
+            <button
+              onClick={() => {
+                drawRef.current?.deleteAll();
+                setMeasurementResult(null);
+                setIsMeasuring(false);
+              }}
+              className="p-1 hover:bg-slate-500/20 rounded-md transition-colors"
+            >
+              <Trash2 size={16} className="text-red-400" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <p className="text-[10px] uppercase font-bold text-blue-400 mb-1">Luas Tanah</p>
+              <div className="flex flex-col">
+                <span className="text-lg font-black">{measurementResult.area.toLocaleString('id-ID', { maximumFractionDigits: 2 })} m²</span>
+                <span className="text-xs text-slate-400">
+                  ≈ {(measurementResult.area / 10000).toFixed(4)} Ha
+                </span>
+                <span className="text-xs text-blue-400 font-medium">
+                  ≈ {(measurementResult.area / 400).toFixed(2)} Rantai
+                </span>
+              </div>
+            </div>
+
+            <div className={`p-2 rounded-lg border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50/50 border-slate-200'}`}>
+              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Keliling Lahan</p>
+              <span className="text-sm font-bold">
+                {measurementResult.perimeter > 1000
+                  ? `${(measurementResult.perimeter / 1000).toFixed(2)} km`
+                  : `${measurementResult.perimeter.toFixed(1)} m`}
+              </span>
+            </div>
+          </div>
+
+          <p className="mt-3 text-[9px] text-slate-500 text-center leading-tight">
+            *Hasil ini adalah estimasi digital.<br />Gunakan jasa survei profesional untuk legalitas.
+          </p>
+        </div>
+      )}
 
       {/* Loading Overlay */}
       <div className={`absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-2xl transition-all duration-1000 pointer-events-none ${mapLoaded ? 'opacity-0' : 'opacity-100'}`}>
